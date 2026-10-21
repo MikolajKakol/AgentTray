@@ -36,6 +36,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>AgentTray przełącza na okno terminala z wybraną sesją Claude Code.</string>
 </dict>
 </plist>
 PLIST

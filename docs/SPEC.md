@@ -18,7 +18,7 @@ Poza zakresem (decyzje, nie przeoczenia):
 
 - żadnych zapisów do katalogów `.claude`, żadnych hooków, żadnej modyfikacji `settings.json`; aplikacja tylko czyta;
 - brak odpowiadania agentowi z aplikacji (zatwierdzanie zgód, wysyłanie promptów);
-- brak przechodzenia do terminala lub okna Speedwave po kliknięciu;
+- brak przechodzenia do okna Speedwave Desktop; przycisk w wierszu przełącza tylko na okno terminala (patrz "Przejście do terminala");
 - brak powiadomień systemowych; jedynym sygnałem jest ikona w pasku menu;
 - brak listy subagentów; wystarczy stan "czeka na subagentów (N)";
 - brak App Sandbox, brak notaryzacji, brak instalatora.
@@ -73,12 +73,15 @@ Przykład: `fixtures/sessions-3398.json`. Pola używane przez aplikację:
 
 - `sessionId`: klucz łączący z transkryptem;
 - `name`: nazwa sesji (np. `workspace-56`);
-- `status`: `idle` albo `busy`;
-- `updatedAt`, `statusUpdatedAt`: milisekundy od epoki.
+- `status`: `idle`, `busy` albo `shell`;
+- `updatedAt`, `statusUpdatedAt`: milisekundy od epoki;
+- `pid`, `startedAt` (milisekundy od epoki, czas startu procesu), `kind` (`interactive` albo `bg`), `entrypoint` (`cli` albo `sdk-cli`): tylko do przejścia do terminala.
+
+Jeden plik odpowiada jednemu procesowi `claude`. `/clear` i `/resume` nadpisują w nim `sessionId` (oraz `name` i `updatedAt`), a `pid` i `startedAt` zostają bez zmian. Plik wskazuje więc rozmowę, która jest teraz otwarta w danym procesie.
 
 Ograniczenia:
 
-- pliki po zamkniętych sesjach zostają na dysku, a `pid` i `pidDomain` pochodzą z przestrzeni nazw kontenera, więc z hosta nie da się sprawdzić, czy proces żyje;
+- pliki po zamkniętych sesjach zostają na dysku, a w kontenerach `pid` i `pidDomain` pochodzą z przestrzeni nazw kontenera, więc z hosta nie da się sprawdzić, czy proces żyje;
 - `sessionId` może wskazywać sesję bez transkryptu (sesja bez żadnej wiadomości); taką sesję aplikacja pomija;
 - `status` jest sygnałem pomocniczym, nie źródłem stanu (patrz "Model stanów").
 
@@ -233,6 +236,29 @@ Lista i rozwinięty tekst wiersza mają wysokość dopasowaną do zawartości (l
 
 Pusta lista: tekst "Brak aktywnych sesji" i liczba śledzonych katalogów.
 
+### Przejście do terminala
+
+Wiersz sesji ma przycisk "Pokaż okno terminala" tylko wtedy, gdy żywy proces ma tę rozmowę otwartą w terminalu: najnowszy plik `sessions/<pid>.json` z tą sesją ma `kind` inny niż `bg` i `entrypoint` równy `cli`, a dopasowanie poniżej znajduje proces. Rozmowa zamknięta albo opuszczona przez `/clear` lub `/resume` nie ma przycisku. Kliknięcie wyciąga okno procesu na wierzch, a sesję z grupy "czeka na Ciebie" albo "niepewny" oznacza jako przejrzaną (jak przycisk ✓). Aplikacja nic nie zapisuje w `.claude`.
+
+Procesy na hoście (`HostProcess`: pid, rodzic, czas startu, terminal, argumenty, katalog roboczy) aplikacja czyta z jądra (`sysctl`, `proc_pidinfo`) co 5 s, po każdej zmianie plików i w chwili kliknięcia. Zamknięcie okna nie zmienia żadnego pliku, więc przycisk znika najpóźniej po 5 s; gdy proces zniknął przed kliknięciem, przycisk znika od razu.
+
+Sesje z kontenerów Speedwave. Katalog `.claude` ma postać `<dataDir>/claude-home/<projekt>/.claude`, np. `~/.speedwave/claude-home/resql/.claude`. Polecenie `speedwave` w terminalu uruchamia na hoście `ssh -F <dataDir>/lima/<vm>/ssh.config -t lima-<vm> -- sudo nerdctl exec -it … <prefiks>_<projekt>_claude env SPW_SESSION_INSTANCE_ID=<uuid> /usr/local/bin/claude …`. Prefiks to nazwa `dataDir` bez kropki (`speedwave`, `speedwave-dev`). Jeden taki `ssh` to jedno okno i jeden proces `claude` w kontenerze. Dopasowanie:
+
+1. kandydaci: procesy `ssh` z terminalem, z `-F` pod `dataDir` i z nazwą kontenera projektu w argumentach; `ssh` Speedwave Desktop (bez terminala, `claude -p --output-format stream-json`) odpada;
+2. każdy kandydat dostaje plik `sessions/*.json` (z pominięciem `bg` i `sdk-cli`), którego `startedAt` jest najbliżej czasu startu `ssh`, w oknie od 5 s przed do 120 s po nim; pliki po zamkniętych oknach mają stare `startedAt` i odpadają;
+3. okno sesji to kandydat, którego plik ma teraz jej `sessionId`; przy kilku wygrywa najmniejsza różnica czasów.
+
+Rozmowa, z której wyszło się przez `/clear` albo `/resume`, nie ma okna. Zegar VM-a Limy jest zsynchronizowany z hostem; na prawdziwych danych różnica wynosiła 2 s.
+
+Sesje lokalne (każdy inny katalog `.claude`): `pid` z pliku to pid na hoście. Proces musi istnieć i mieć czas startu zgodny ze `startedAt` z dokładnością do 5 s (pid mógł zostać użyty ponownie). Przy kilku plikach z tą samą rozmową wygrywa najnowszy `updatedAt`.
+
+Okno: aplikacja idzie od znalezionego procesu w górę po rodzicach do pierwszej zwykłej aplikacji (emulator terminala). Dla Ghostty (`com.mitchellh.ghostty`, AppleScript od 1.3) wybiera konkretny terminal (kartę albo split) i wywołuje na nim `focus`:
+
+- gdy Ghostty podaje `tty` terminala (wersje nowsze niż 1.3.1), po równości z terminalem procesu;
+- inaczej po tytule i katalogu. Tytuł terminala ustawia Claude Code (np. `✳ Implement login`); znak aktywności na początku, wielkość liter i nadmiarowe spacje są pomijane, tytuł ucięty wielokropkiem albo krótszy o całe słowa (co najmniej 8 znaków) pasuje do początku. Tytuły sesji do porównania: `title`, `customTitle`, `aiTitle` i `name` z rejestru. Katalog to katalog roboczy znalezionego procesu (dla `ssh` katalog, z którego uruchomiono `speedwave`) porównany z `working directory` terminala. Wygrywa jedyny terminal pasujący tytułem i katalogiem; potem jedyny pasujący tytułem; gdy żaden tytuł nie pasuje, jedyny terminal w tym katalogu. W pozostałych przypadkach aplikacja aktywuje tylko Ghostty.
+
+Dla innych terminali aplikacja aktywuje samą aplikację. AppleScript wymaga zgody na Automatyzację (pytanie systemowe przy pierwszym użyciu, opis w `NSAppleEventsUsageDescription`).
+
 ### Ustawienia
 
 Okno `Settings` z polami:
@@ -299,7 +325,8 @@ UI bez testów automatycznych.
 
 Każdy z nich wymaga uruchomienia prawdziwej sesji Claude Code, zapisania fragmentu transkryptu jako nowego fixture'a i ewentualnej korekty reguł:
 
-- ścieżka katalogów home kontenerów Speedwave na macOS (do wpisania w ustawieniach i w README);
+- ścieżka katalogów home kontenerów Speedwave na macOS (do wpisania w ustawieniach i w README); z kodu Speedwave wynika `~/.speedwave/claude-home/<projekt>` (instalacja deweloperska: `~/.speedwave-dev/…`);
+- czy tytuł terminala ustawiany przez Claude Code to `aiTitle` z transkryptu, czy osobno wygenerowany temat; od tego zależy, jak często przejście do terminala trafia po tytule;
 - format zakończenia i wygaśnięcia `Monitor` oraz to, czy jego uruchomienie zwraca `backgroundTaskId`;
 - `ScheduleWakeup` (`/loop`): czy zaplanowane wybudzenie powinno dawać stan `monitoring`; jeśli tak, reguła na podstawie `input.delaySeconds` i `timestamp` wywołania;
 - rekord przerwania tury;

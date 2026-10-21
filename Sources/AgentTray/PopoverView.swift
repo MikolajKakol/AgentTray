@@ -35,9 +35,11 @@ struct PopoverView: View {
                                     row: row,
                                     now: store.now,
                                     isExpanded: expanded.contains(row.id),
+                                    hasTerminal: store.sessionsWithTerminal.contains(row.id),
                                     toggle: { toggle(row.id) },
                                     acknowledge: { store.acknowledge(row) },
-                                    restore: { store.unacknowledge(row) }
+                                    restore: { store.unacknowledge(row) },
+                                    focusTerminal: { store.focusTerminal(row) }
                                 )
                                 Divider().padding(.leading, 12)
                             }
@@ -128,9 +130,11 @@ struct SessionRowView: View {
     let row: SessionRow
     let now: Date
     let isExpanded: Bool
+    let hasTerminal: Bool
     let toggle: () -> Void
     let acknowledge: () -> Void
     let restore: () -> Void
+    let focusTerminal: () -> Void
 
     private var snapshot: SessionSnapshot { row.snapshot }
 
@@ -160,6 +164,7 @@ struct SessionRowView: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: toggle)
 
+                terminalButton
                 acknowledgeButton
             }
 
@@ -170,6 +175,18 @@ struct SessionRowView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .opacity(row.isDimmed || row.isAcknowledged ? 0.55 : 1)
+    }
+
+    @ViewBuilder
+    private var terminalButton: some View {
+        if hasTerminal {
+            Button(action: focusTerminal) {
+                Image(systemName: "macwindow")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.borderless)
+            .help("Pokaż okno terminala z tą sesją")
+        }
     }
 
     @ViewBuilder

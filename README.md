@@ -34,8 +34,8 @@ swift test                 # testy AgentTrayCore
 
 ## Struktura
 
-- `Sources/AgentTrayCore`: parser JSONL (`TranscriptRecord`), model stanów (`reduce`, `classify`), przyrostowy czytnik transkryptów (`TranscriptReader`), rozwijanie wzorców (`PathPattern`), skaner katalogu `.claude` (`ClaudeDirectoryScanner`), sortowanie i grupowanie (`SessionListing`), teksty statusów (`StatusText`).
-- `Sources/AgentTray`: `MenuBarExtra`, popover, ustawienia, FSEvents (`FileWatcher`), aktor `SessionMonitor` czytający pliki poza wątkiem głównym.
+- `Sources/AgentTrayCore`: parser JSONL (`TranscriptRecord`), model stanów (`reduce`, `classify`), przyrostowy czytnik transkryptów (`TranscriptReader`), rozwijanie wzorców (`PathPattern`), skaner katalogu `.claude` (`ClaudeDirectoryScanner`), sortowanie i grupowanie (`SessionListing`), teksty statusów (`StatusText`), dopasowanie sesji do procesu i okna terminala (`TerminalLocator`).
+- `Sources/AgentTray`: `MenuBarExtra`, popover, ustawienia, FSEvents (`FileWatcher`), aktor `SessionMonitor` czytający pliki poza wątkiem głównym, odczyt procesów (`ProcessTable`) i przełączanie na okno terminala (`TerminalFocuser`, AppleScript Ghostty).
 - `Tests/AgentTrayCoreTests`: testy na fixture'ach z `docs/fixtures` i na tymczasowych drzewach katalogów.
 
 ## Kontenery Speedwave

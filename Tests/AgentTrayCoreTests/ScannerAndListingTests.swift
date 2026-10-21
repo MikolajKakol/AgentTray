@@ -31,6 +31,10 @@ struct ClaudeDirectoryScannerTests {
         #expect(snapshot.workingDirectoryName == "workspace")
         #expect(snapshot.lastPrompt == "Dodaj walidację formularza logowania")
         #expect(snapshot.sessionId == sessionId)
+        #expect(snapshot.directoryPath == temp.url.appendingPathComponent(".claude").path)
+        #expect(snapshot.registryName == "workspace-56")
+        #expect(snapshot.isTerminalSession)
+        #expect(scanner.registryEntries.map(\.pid) == [3398])
         // The newest of the last record, the file mtime and the registry's `updatedAt`.
         #expect(snapshot.lastActivity >= fixtureTime(3))
     }

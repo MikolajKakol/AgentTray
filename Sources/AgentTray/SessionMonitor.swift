@@ -68,6 +68,27 @@ actor SessionMonitor {
         return makeUpdate()
     }
 
+    /// All registry files of one tracked directory, stale ones included, for finding a session's terminal.
+    func registryEntries(directoryPath: String) -> [SessionRegistryEntry] {
+        scanners[directoryPath]?.registryEntries ?? []
+    }
+
+    /// Snapshot ids of sessions that a live process has open in a terminal right now.
+    func sessionsWithTerminal(processes: [HostProcess]) -> Set<String> {
+        var result: Set<String> = []
+        for scanner in scanners.values {
+            let entries = scanner.registryEntries
+            for snapshot in scanner.snapshots() where snapshot.isTerminalSession {
+                let process = TerminalLocator.process(
+                    forSession: snapshot.sessionId, claudeDirectory: snapshot.directoryPath,
+                    entries: entries, processes: processes
+                )
+                if process != nil { result.insert(snapshot.id) }
+            }
+        }
+        return result
+    }
+
     private func expandPatterns() {
         lastExpansion = Date()
         let home = FileManager.default.homeDirectoryForCurrentUser
