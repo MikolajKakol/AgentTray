@@ -2,12 +2,13 @@ import AgentTrayCore
 import Darwin
 import Foundation
 
-/// Reads the current user's processes from the kernel. Arguments and the working directory
-/// are read only for `ssh` (Speedwave windows); the rest are needed for local sessions'
-/// pids and for walking up to the terminal app.
+/// Reads all processes from the kernel. Arguments and the working directory are read only
+/// for `ssh` (Speedwave windows); the rest are needed for local sessions' pids and for
+/// walking up to the terminal app. Other users' processes are needed too: terminals start
+/// the shell through `/usr/bin/login`, which runs as root.
 enum ProcessTable {
     static func read() -> [HostProcess] {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_UID, Int32(bitPattern: getuid())]
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
         var size = 0
         guard sysctl(&mib, u_int(mib.count), nil, &size, nil, 0) == 0 else { return [] }
         let stride = MemoryLayout<kinfo_proc>.stride

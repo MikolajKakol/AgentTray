@@ -14,27 +14,38 @@ enum TerminalFocuser {
             forSession: snapshot.sessionId, claudeDirectory: snapshot.directoryPath,
             entries: entries, processes: processes
         ) else {
-            logger.info("No live process for session \(snapshot.sessionId, privacy: .public)")
+            logger.notice("No live process for session \(snapshot.sessionId, privacy: .public)")
             return false
         }
         if process.workingDirectory == nil {
             process.workingDirectory = ProcessTable.workingDirectory(of: process.pid)
         }
+        let processInfo = "pid \(process.pid), tty \(process.tty ?? "-"), cwd \(process.workingDirectory ?? "-")"
+        logger.notice("Session \(snapshot.sessionId, privacy: .public): \(processInfo, privacy: .public)")
         guard let app = owningApplication(of: process, in: processes) else {
-            logger.info("No app above pid \(process.pid)")
+            logger.notice("No app above pid \(process.pid)")
             return false
         }
+        logger.notice("Terminal app: \(app.bundleIdentifier ?? "?", privacy: .public), pid \(app.processIdentifier)")
         if app.bundleIdentifier == Ghostty.bundleIdentifier {
             let titles = [snapshot.title, snapshot.facts.customTitle, snapshot.facts.aiTitle, snapshot.registryName]
                 .compactMap { $0 }
-            if let surfaces = Ghostty.surfaces(),
-               let surface = TerminalLocator.surface(for: process, titles: titles, in: surfaces),
-               Ghostty.focus(surfaceId: surface.id) {
-                return true
+            let surfaces = Ghostty.surfaces()
+            let surfaceList = surfaces.map { list in
+                list.map { "\($0.id) [\($0.name)] \($0.workingDirectory ?? "-") \($0.tty ?? "-")" }.joined(separator: " | ")
+            } ?? "error"
+            logger.notice("Ghostty surfaces: \(surfaceList, privacy: .public); titles: \(titles.joined(separator: " | "), privacy: .public)")
+            if let surfaces, let surface = TerminalLocator.surface(for: process, titles: titles, in: surfaces) {
+                let focused = Ghostty.focus(surfaceId: surface.id)
+                logger.notice("Focus surface \(surface.id, privacy: .public): \(focused)")
+                if focused { return true }
+            } else {
+                logger.notice("No single Ghostty surface for pid \(process.pid); activating the app only")
             }
-            logger.info("No single Ghostty surface for pid \(process.pid); activating the app only")
         }
-        return app.activate()
+        let activated = app.activate()
+        logger.notice("Activate \(app.bundleIdentifier ?? "?", privacy: .public): \(activated)")
+        return activated
     }
 
     /// The first ancestor that is a regular app (the terminal emulator).
