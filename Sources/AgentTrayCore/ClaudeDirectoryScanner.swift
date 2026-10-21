@@ -70,16 +70,17 @@ public final class ClaudeDirectoryScanner {
         var projectDirectories: Set<String>? = changedPaths == nil ? nil : []
         for rawPath in changedPaths ?? [] {
             let path = rawPath.hasSuffix("/") ? String(rawPath.dropLast()) : rawPath
-            if path.hasPrefix(sessionsURL.path) {
+            if path == directory.url.path || path == projectsURL.path {
+                // The `.claude` or `projects/` directory itself changed: rescan everything.
+                scanRegistry = true
+                projectDirectories = nil
+            } else if path == sessionsURL.path || path.hasPrefix(sessionsURL.path + "/") {
                 scanRegistry = true
             } else if path.hasPrefix(projectsURL.path + "/"),
                       let first = path.dropFirst(projectsURL.path.count + 1).split(separator: "/").first {
                 projectDirectories?.insert(String(first))
-            } else {
-                // The `.claude` or `projects/` directory itself changed: rescan everything.
-                scanRegistry = true
-                projectDirectories = nil
             }
+            // Anything else under `.claude` (logs, todos, caches) does not affect sessions.
         }
         if scanRegistry { refreshRegistry() }
         refreshTranscripts(in: projectDirectories, thresholds: thresholds, now: now)

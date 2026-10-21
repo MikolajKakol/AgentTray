@@ -64,6 +64,19 @@ struct ClaudeDirectoryScannerTests {
         #expect(scanner.refresh(thresholds: .default, now: Date()).isEmpty)
     }
 
+    @Test func changesOutsideSessionsAndProjectsAreIgnored() throws {
+        let (temp, scanner) = try setUp()
+        let path = ".claude/projects/-workspace/s1.jsonl"
+        try temp.write(path, Line.prompt("Hej"))
+        scanner.refresh(thresholds: .default, now: Date())
+
+        try temp.append(path, Line.text("Nowa odpowiedź"))
+        let debug = temp.url.appendingPathComponent(".claude/debug").path
+        #expect(scanner.refresh(changedPaths: [debug], thresholds: .default, now: Date()).first?.lastMessage == nil)
+        let claude = temp.url.appendingPathComponent(".claude").path + "/"
+        #expect(scanner.refresh(changedPaths: [claude], thresholds: .default, now: Date()).first?.lastMessage == "Nowa odpowiedź")
+    }
+
     @Test func transcriptsOlderThanHideThresholdAreNotRead() throws {
         let (temp, scanner) = try setUp()
         let file = try temp.write(".claude/projects/-workspace/old.jsonl", Line.prompt("Stara sesja"))
