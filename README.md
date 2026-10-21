@@ -2,6 +2,24 @@
 
 Aplikacja w pasku menu macOS, która pokazuje, które sesje Claude Code czekają na Ciebie, a które pracują. Specyfikacja: [`docs/SPEC.md`](docs/SPEC.md), zasady pracy z kodem: [`docs/CLAUDE.md`](docs/CLAUDE.md).
 
+## Instalacja
+
+Gotowy `.dmg` (Apple Silicon) jest w
+[Releases → latest-macos](https://github.com/MikolajKakol/AgentTray/releases/tag/latest-macos)
+(lub z **Actions → macOS build → Artifacts** dla dowolnej gałęzi).
+
+1. Otwórz `.dmg` i przeciągnij **AgentTray** do **Applications**.
+2. Aplikacja nie jest notaryzowana, więc przy pierwszym uruchomieniu macOS ją zablokuje: otwórz
+   **Ustawienia systemowe → Prywatność i ochrona** i kliknij **Otwórz mimo to**. Alternatywnie:
+   `xattr -dr com.apple.quarantine /Applications/AgentTray.app`.
+3. Ikona pojawia się w pasku menu (bez ikony w Docku).
+
+## CI
+
+**macOS build** ([`macos.yml`](.github/workflows/macos.yml)) – przy każdym pushu i PR-ze na runnerze
+macOS: `swift test`, `./build.sh` (aplikacja podpisana ad hoc), `.dmg` w **Artifacts** (z gałęzi
+domyślnej także w Releases jako `latest-macos`).
+
 ## Build i uruchomienie
 
 Wymaga macOS 15+ i Swift 6 (Xcode 16+ albo Command Line Tools).
