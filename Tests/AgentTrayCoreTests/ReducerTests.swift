@@ -64,6 +64,37 @@ struct ReducerTests {
         #expect(try status(Array(lines.dropLast()), now: fixtureTime(2)) == .runningTool(name: "Read", summary: "notes.md"))
     }
 
+    @Test func endTurnEndsTheTurnOnlyWithoutOpenTools() throws {
+        let endTurn = Line.json(["type": "assistant", "timestamp": Line.ts(4),
+                                 "message": ["role": "assistant", "content": [["type": "text", "text": "Koniec"]], "stop_reason": "end_turn"]])
+        let stopSequence = Line.json(["type": "assistant", "timestamp": Line.ts(4),
+                                      "message": ["role": "assistant", "content": [["type": "text", "text": "Koniec"]], "stop_reason": "stop_sequence"]])
+        #expect(try status([Line.prompt("Hej"), endTurn]) == .yourTurn)
+        #expect(try status([Line.prompt("Hej"), stopSequence]) == .yourTurn)
+        // A tool call without a result keeps the turn open.
+        let open = [Line.prompt("Hej"), Line.toolUse("q", "AskUserQuestion", at: 1), endTurn]
+        #expect(try !facts(from: open).turnEnded)
+        #expect(try status(open) == .askingQuestion)
+        // `tool_use` and a missing stop_reason do not end the turn.
+        #expect(try status([Line.prompt("Hej"), Line.text("Myślę…")]) == .yourTurn, "Line.text uses end_turn")
+        let noReason = Line.json(["type": "assistant", "timestamp": Line.ts(4),
+                                  "message": ["role": "assistant", "content": [["type": "text", "text": "…"]]]])
+        #expect(try status([Line.prompt("Hej"), noReason]) == .thinking)
+    }
+
+    @Test func promptTextRendersSlashCommands() {
+        let command = "<command-message>grill-with-docs is running…</command-message>\n<command-name>/grill-with-docs</command-name>\n<command-args>docs/SPEC.md</command-args>"
+        #expect(TranscriptRecord.promptText(command) == "/grill-with-docs docs/SPEC.md")
+        #expect(TranscriptRecord.promptText("<command-name>/clear</command-name>\n<command-args></command-args>") == "/clear")
+        #expect(TranscriptRecord.promptText("zwykły prompt") == "zwykły prompt")
+    }
+
+    @Test func firstPromptIsKept() throws {
+        let result = try facts(from: [Line.prompt("Pierwszy"), Line.text("a"), Line.turnDuration(), Line.prompt("Drugi", at: 10)])
+        #expect(result.firstHumanPrompt == "Pierwszy")
+        #expect(result.lastPrompt == "Drugi")
+    }
+
     @Test func toolSummaries() {
         #expect(TranscriptRecord.toolSummary(name: "Bash", input: ["command": "ls", "description": "List"]) == "List")
         let long = String(repeating: "x", count: 100)

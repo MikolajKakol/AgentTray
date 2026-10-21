@@ -26,7 +26,7 @@ struct ClaudeDirectoryScannerTests {
         let snapshots = scanner.refresh(thresholds: .default, now: Date())
         #expect(snapshots.count == 1)
         let snapshot = try #require(snapshots.first)
-        #expect(snapshot.title == "workspace-56", "no ai-title in transcript: falls back to the registry name")
+        #expect(snapshot.title == "Dodaj walidację formularza logowania", "no ai-title in transcript: falls back to the first prompt")
         #expect(snapshot.sourceLabel == "alpha")
         #expect(snapshot.workingDirectoryName == "workspace")
         #expect(snapshot.lastPrompt == "Dodaj walidację formularza logowania")
@@ -35,9 +35,31 @@ struct ClaudeDirectoryScannerTests {
         #expect(snapshot.lastActivity >= fixtureTime(3))
     }
 
+    @Test func titleFallsBackToFirstPromptBeforeRegistryName() throws {
+        let (temp, scanner) = try setUp()
+        try temp.write(".claude/projects/-workspace/\(sessionId).jsonl",
+                       Line.prompt("<command-name>/grill-with-docs</command-name>\n<command-args>plan</command-args>")
+                       + Line.text("a") + Line.prompt("Drugi prompt", at: 10))
+        try FileManager.default.copyItem(at: Fixtures.url("sessions-3398.json"),
+                                         to: temp.url.appendingPathComponent(".claude/sessions/3398.json"))
+        let snapshot = try #require(scanner.refresh(thresholds: .default, now: Date()).first)
+        #expect(snapshot.title == "/grill-with-docs plan")
+        #expect(snapshot.lastPrompt == "Drugi prompt")
+    }
+
+    @Test func longFirstPromptIsShortenedForTheTitle() throws {
+        let (temp, scanner) = try setUp()
+        let long = "Bardzo długi prompt\nz kilkoma liniami " + String(repeating: "słowo ", count: 30)
+        try temp.write(".claude/projects/-workspace/s.jsonl", Line.prompt(long))
+        let title = try #require(scanner.refresh(thresholds: .default, now: Date()).first?.title)
+        #expect(title.count <= 60)
+        #expect(title.hasPrefix("Bardzo długi prompt z kilkoma liniami"))
+        #expect(title.hasSuffix("…"))
+    }
+
     @Test func titleFallsBackToSessionIdPrefix() throws {
         let (temp, scanner) = try setUp()
-        try temp.write(".claude/projects/-workspace/abcdef0123456789.jsonl", Line.prompt("Hej"))
+        try temp.write(".claude/projects/-workspace/abcdef0123456789.jsonl", Line.text("Bez promptu"))
         let snapshot = try #require(scanner.refresh(thresholds: .default, now: Date()).first)
         #expect(snapshot.title == "abcdef01")
     }

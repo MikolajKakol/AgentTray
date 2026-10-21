@@ -65,6 +65,36 @@ struct FixtureTests {
         #expect(facts.backgroundTasks == ["b0000001": .task])
     }
 
+    // Sessions started from a desktop app (entrypoints `sdk-cli`, `remote_desktop`) never
+    // write `system/turn_duration`; the turn ends with an `end_turn` assistant record.
+    // Fixtures 10 and 11 come from a real `remote_desktop` session on Claude Code 2.1.306.
+    @Test func desktopSessionWithoutTurnDurationEndsOnEndTurn() throws {
+        let facts = try Fixtures.facts("10-desktop-turn-ended.jsonl")
+        #expect(classify(facts: facts, settings: .default, now: fixtureTime(2 * 3600 + 60)) == .yourTurn)
+        #expect(facts.lastMessage == "Scalone do main.")
+    }
+
+    @Test func desktopStopHookContinuationAndBackgroundTask() throws {
+        let lines = try String(contentsOf: Fixtures.url("11-desktop-stop-hook-continuation.jsonl"), encoding: .utf8)
+            .split(separator: "\n").map { String($0) + "\n" }
+        let firstEndTurn = try #require(lines.firstIndex { $0.contains("\"end_turn\"") })
+
+        // The first answer ends the turn…
+        let ended = try facts(from: Array(lines[...firstEndTurn]))
+        #expect(ended.turnEnded)
+        // …then the Stop hook feeds back an isMeta user record and the agent carries on.
+        let stopHook = try #require(lines.indices.first { $0 > firstEndTurn && lines[$0].contains("\"isMeta\": true") })
+        #expect(try facts(from: Array(lines[...stopHook])).turnEnded, "isMeta feedback alone does not reopen the turn")
+        let resumed = try #require(lines.indices.first { $0 > stopHook && lines[$0].contains("\"type\": \"assistant\"") })
+        #expect(try !facts(from: Array(lines[...resumed])).turnEnded)
+
+        // The whole turn ends with a background Bash still running.
+        let all = try Fixtures.facts("11-desktop-stop-hook-continuation.jsonl")
+        #expect(classify(facts: all, settings: .default, now: fixtureTime(2 * 3600 + 600)) == .monitoring(1))
+        #expect(all.lastPrompt == "Scal zmiany do main")
+        #expect(all.lastMessage == "Scalone do main.")
+    }
+
     @Test func sessionRegistry() throws {
         let entry = try SessionRegistryEntry.decode(Data(contentsOf: Fixtures.url("sessions-3398.json")))
         #expect(entry.sessionId == "11111111-2222-3333-4444-555555555555")
@@ -76,7 +106,7 @@ struct FixtureTests {
 
     @Test func noFixtureLineIsInvalid() throws {
         let names = try FileManager.default.contentsOfDirectory(atPath: Fixtures.directory.path).filter { $0.hasSuffix(".jsonl") }
-        #expect(names.count == 9)
+        #expect(names.count == 11)
         for name in names {
             let reader = TranscriptReader(url: Fixtures.url(name))
             try reader.update()

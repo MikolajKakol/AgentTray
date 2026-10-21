@@ -78,6 +78,8 @@ public final class TranscriptReader {
             forEachLine(in: chunk) { older = reduce(state: older, record: $0) }
             if facts.lastPromptRecord == nil { facts.lastPromptRecord = older.lastPromptRecord }
             if facts.lastHumanPrompt == nil { facts.lastHumanPrompt = older.lastHumanPrompt }
+            // Older chunks come earlier in the file, so their first prompt wins.
+            facts.firstHumanPrompt = older.firstHumanPrompt ?? facts.firstHumanPrompt
             if facts.customTitle == nil { facts.customTitle = older.customTitle }
             if facts.aiTitle == nil { facts.aiTitle = older.aiTitle }
             if facts.cwd == nil { facts.cwd = older.cwd }

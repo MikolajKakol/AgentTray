@@ -94,7 +94,10 @@ public final class ClaudeDirectoryScanner {
             let entry = registry[transcript.sessionId]
             let activity = [facts.lastRecordTimestamp, reader.modificationDate, entry?.updatedAt]
                 .compactMap { $0 }.max() ?? .distantPast
-            let title = facts.transcriptTitle ?? entry?.name ?? String(transcript.sessionId.prefix(8))
+            let title = facts.transcriptTitle
+                ?? facts.firstHumanPrompt.flatMap(Self.shortTitle)
+                ?? entry?.name
+                ?? String(transcript.sessionId.prefix(8))
             return SessionSnapshot(
                 id: directory.url.path + "#" + transcript.sessionId,
                 sessionId: transcript.sessionId,
@@ -107,6 +110,13 @@ public final class ClaudeDirectoryScanner {
                 facts: facts
             )
         }
+    }
+
+    /// One line of at most 60 characters.
+    static func shortTitle(_ prompt: String) -> String? {
+        let line = prompt.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard !line.isEmpty else { return nil }
+        return line.count <= 60 ? line : String(line.prefix(59)) + "…"
     }
 
     private func refreshRegistry() {

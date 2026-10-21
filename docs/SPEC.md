@@ -112,6 +112,10 @@ Fakty o formacie, zweryfikowane na prawdziwych transkryptach:
 - Subagent na pierwszym planie: `tool_use` o nazwie `Agent` bez wyniku do czasu zakończenia; wynik ma `toolUseResult.status: "completed"`.
 - Zakończenie zadania w tle: rekord `queue-operation` z `operation: "enqueue"` i `content` zawierającym `<task-notification>` z `<task-id>`, `<tool-use-id>` i `<status>completed</status>`. Następnie, gdy sesja go przetworzy, rekord `user` z `origin.kind == "task-notification"` i tą samą treścią.
 - `system/turn_duration` ma opcjonalne pole `pendingBackgroundAgentCount`, gdy w momencie końca tury działają subagenci w tle.
+- Sesje uruchomione z aplikacji desktopowej (pole `entrypoint`: `sdk-cli` w Speedwave Desktop, `remote_desktop` w Claude Code 2.1.306) w ogóle nie zapisują `system/turn_duration`. Koniec tury to tam tylko ostatni rekord `assistant` ze `stop_reason: end_turn`. Sesje z terminala (`entrypoint: cli`) zapisują `turn_duration`.
+- Po `end_turn` hook Stop może zablokować koniec tury: dopisuje rekord `user` z `isMeta: true` (treść hooka), a agent pracuje dalej kolejnymi rekordami `assistant`.
+- Desktop nie zapisuje `custom-title` ani `ai-title`; `name` w `sessions/*.json` ma wtedy postać `workspace-<hex>` (`nameSource: "derived"`).
+- Prompt z komendą slash jest zapisany jako `<command-name>/x</command-name>` i `<command-args>…</command-args>`.
 - `permissionDecision` na wynikach narzędzi ma kształt `{"decision":"accept","source":"config","reasonType":"mode"}` (zgoda z konfiguracji) albo `{"decision":"accept","source":"user_temporary"}` (zgoda kliknięta przez użytkownika). Pole pojawia się dopiero razem z wynikiem, więc nie pozwala wykryć oczekiwania na zgodę.
 
 Niezweryfikowane (brak przykładów w dostępnych transkryptach; potwierdzić na prawdziwej sesji i dopisać fixture):
@@ -131,12 +135,13 @@ Dla każdej sesji parser utrzymuje, przetwarzając rekordy po kolei:
 - `openToolUses`: mapa `tool_use.id` na `(name, input, timestamp)` dla wywołań bez wyniku;
 - `backgroundTasks`: zbiór identyfikatorów zadań w tle uruchomionych i jeszcze niezakończonych. Dodanie: `toolUseResult.backgroundTaskId` albo `toolUseResult.agentId` przy `status == "async_launched"`. Usunięcie: `<task-id>` z dowolnego `<task-notification>` (w `queue-operation` albo w rekordzie `user`). Rodzaj zadania (`agent` albo `task`) wynika ze sposobu uruchomienia;
 - `pendingBackgroundAgents`: `pendingBackgroundAgentCount` z ostatniego `turn_duration`, pomniejszone o powiadomienia o subagentach, które przyszły po nim; brak pola oznacza 0;
-- `turnEnded`: `true` po rekordzie `turn_duration` albo po rekordzie przerwania; `false` po promptcie użytkownika, po rekordzie `user` z `origin.kind == "task-notification"` i po każdym rekordzie `assistant`;
+- `turnEnded`: `true` po rekordzie `turn_duration`, po rekordzie przerwania albo po rekordzie `assistant` ze `stop_reason` równym `end_turn` lub `stop_sequence`, jeśli po nim `openToolUses` jest puste; `false` po promptcie użytkownika, po rekordzie `user` z `origin.kind == "task-notification"` i po każdym innym rekordzie `assistant`;
 - `permissionMode`: wartość z ostatniego `permission-mode`;
 - `lastActivity`: maksimum z `timestamp` ostatniego rekordu, mtime pliku JSONL i `updatedAt` z `sessions/*.json`;
-- `lastPrompt`: `lastPrompt` z ostatniego `last-prompt`; jeśli brak, treść ostatniego rekordu `user` z `origin.kind == "human"`;
+- `lastPrompt`: `lastPrompt` z ostatniego `last-prompt`; jeśli brak, treść ostatniego rekordu `user` z `origin.kind == "human"`. Komenda slash jest pokazywana jako `/x args`;
+- `firstPrompt`: treść pierwszego rekordu `user` z `origin.kind == "human"` (w tej samej postaci);
 - `lastMessage`: tekst ostatniego bloku `text` z rekordu `assistant`;
-- `title`: `customTitle` > `aiTitle` > `name` z `sessions/*.json` > pierwsze 8 znaków `sessionId`.
+- `title`: `customTitle` > `aiTitle` > `firstPrompt` (jedna linia, najwyżej 60 znaków) > `name` z `sessions/*.json` > pierwsze 8 znaków `sessionId`.
 
 Rekordy `user` z `isMeta: true` nie zmieniają `turnEnded` ani `lastPrompt`.
 
@@ -251,7 +256,7 @@ Rdzeń modelu stanów to czysta funkcja: `reduce(state: SessionFacts, record: Tr
 
 ## Testy
 
-Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295. Oczekiwane wyniki:
+Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295 (01–09) i 2.1.306 (10–11). Oczekiwane wyniki:
 
 | Fixture | Oczekiwany stan | Dodatkowo |
 |---|---|---|
@@ -264,6 +269,8 @@ Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `f
 | `07-subagents-background.jsonl` | `waitingForSubagents(2)` | `lastMessage` = "Uruchomiłem dwóch agentów w tle, czekam na wyniki." |
 | `08-subagent-notified.jsonl` | `waitingForSubagents(1)` | |
 | `09-background-bash.jsonl` | `monitoring(1)` | |
+| `10-desktop-turn-ended.jsonl` | `yourTurn` | sesja desktopowa bez `turn_duration`, `entrypoint: remote_desktop`, Claude Code 2.1.306 |
+| `11-desktop-stop-hook-continuation.jsonl` | `monitoring(1)` | `yourTurn` po pierwszym `end_turn`, pracuje dalej po rekordzie `isMeta` z hooka Stop; `lastPrompt` = "Scal zmiany do main" |
 
 `sessions-3398.json` testuje dekodowanie rejestru sesji, a `subagent.meta.json` jest próbką formatu metadanych subagenta (nieużywaną przez aplikację).
 
