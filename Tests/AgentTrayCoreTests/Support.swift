@@ -109,6 +109,11 @@ enum Line {
         "<task-notification>\n<task-id>\(taskId)</task-id>\n<tool-use-id>toolu_x</tool-use-id>\n<status>completed</status>\n<summary>\(summary)</summary>\n</task-notification>"
     }
 
+    /// A `Monitor` output line: no `<tool-use-id>` and no `<status>`.
+    static func monitorEvent(taskId: String, event: String) -> String {
+        "<task-notification>\n<task-id>\(taskId)</task-id>\n<summary>Monitor event: \"log\"</summary>\n<event>\(event)</event>\n</task-notification>"
+    }
+
     static func enqueue(_ content: String, at seconds: TimeInterval = 10) -> String {
         json(["type": "queue-operation", "operation": "enqueue", "timestamp": ts(seconds), "content": content])
     }

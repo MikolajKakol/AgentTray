@@ -170,6 +170,54 @@ struct ReducerTests {
         #expect(try status(delivered) == .yourTurn)
     }
 
+    private func monitorLines(id: String = "m1", timeoutMs: Int = 600_000, persistent: Bool = false) -> [String] {
+        [
+            Line.prompt("Hej"),
+            Line.toolUse("t1", "Monitor", input: ["command": "tail -f log", "description": "log"]),
+            Line.toolResult("t1", toolUseResult: ["taskId": id, "timeoutMs": timeoutMs, "persistent": persistent]),
+            Line.text("Monitoruję", at: 3),
+        ]
+    }
+
+    @Test func monitorEventDoesNotEndMonitoring() throws {
+        let event = Line.monitorEvent(taskId: "m1", event: "ERROR in log")
+        let lines = monitorLines() + [Line.enqueue(event), Line.taskNotificationPrompt(event), Line.text("Widzę błąd, czekam dalej", at: 12)]
+        #expect(try status(lines) == .monitoring(1))
+        #expect(try facts(from: lines).finishedTaskIds.isEmpty)
+    }
+
+    @Test func monitorExpiryEndsMonitoring() throws {
+        let expired = Line.monitorEvent(taskId: "m1", event: "[Monitor expired after 10m with no events delivered. Re-arm it if you still need the watch.]")
+        #expect(try status(monitorLines() + [Line.enqueue(expired)]) == .yourTurn)
+    }
+
+    @Test func monitorPastItsTimeoutIsNotCounted() throws {
+        // The result record is at 2 s; the monitor gets killed at 2 + 600 s.
+        #expect(try status(monitorLines(), now: fixtureTime(601)) == .monitoring(1))
+        #expect(try status(monitorLines(), now: fixtureTime(602)) == .yourTurn)
+        #expect(try status(monitorLines(persistent: true), now: fixtureTime(3600)) == .monitoring(1))
+    }
+
+    @Test func taskStopEndsBackgroundTask() throws {
+        let stop = [
+            Line.prompt("Zatrzymaj", at: 10),
+            Line.toolUse("t2", "TaskStop", input: ["task_id": "m1"], at: 11),
+            Line.toolResult("t2", at: 12, toolUseResult: ["message": "Successfully stopped task: m1 (tail -f log)", "task_id": "m1",
+                                                          "task_type": "local_bash", "command": "tail -f log"]),
+            Line.text("Zatrzymane", at: 13),
+        ]
+        #expect(try status(monitorLines() + stop) == .yourTurn)
+
+        let bash = [
+            Line.prompt("Hej"),
+            Line.toolUse("b1", "Bash", input: ["command": "npm run dev", "run_in_background": true]),
+            Line.toolResult("b1", toolUseResult: ["backgroundTaskId": "m1"]),
+            Line.text("Serwer działa", at: 3),
+        ]
+        #expect(try status(bash) == .monitoring(1))
+        #expect(try status(bash + stop) == .yourTurn)
+    }
+
     @Test func parsesTaskNotifications() {
         let text = "przed " + Line.notification(taskId: "a1", summary: "Agent \"x\" completed") + " po " + Line.notification(taskId: "b2")
         let parsed = TaskNotification.parseAll(in: text)
@@ -177,6 +225,10 @@ struct ReducerTests {
             TaskNotification(taskId: "a1", toolUseId: "toolu_x", status: "completed", summary: "Agent \"x\" completed"),
             TaskNotification(taskId: "b2", toolUseId: "toolu_x", status: "completed", summary: "done"),
         ])
+        let event = TaskNotification.parseAll(in: Line.monitorEvent(taskId: "m1", event: "tick"))
+        #expect(event == [TaskNotification(taskId: "m1", summary: "Monitor event: \"log\"", event: "tick")])
+        #expect(event.first?.isProgressEvent == true)
+        #expect(parsed.first?.isProgressEvent == false)
     }
 
     @Test func lastActivityTracksNewestTimestamp() throws {
