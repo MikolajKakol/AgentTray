@@ -238,7 +238,7 @@ Pusta lista: tekst "Brak aktywnych sesji" i liczba śledzonych katalogów.
 
 ### Przejście do terminala
 
-Wiersz sesji ma przycisk "Pokaż okno terminala" tylko wtedy, gdy żywy proces ma tę rozmowę otwartą w terminalu: najnowszy plik `sessions/<pid>.json` z tą sesją ma `kind` inny niż `bg` i `entrypoint` równy `cli`, a dopasowanie poniżej znajduje proces. Rozmowa zamknięta albo opuszczona przez `/clear` lub `/resume` nie ma przycisku. Kliknięcie wyciąga okno procesu na wierzch. Aplikacja nic nie zapisuje.
+Wiersz sesji ma przycisk "Pokaż okno terminala" tylko wtedy, gdy żywy proces ma tę rozmowę otwartą w terminalu: najnowszy plik `sessions/<pid>.json` z tą sesją ma `kind` inny niż `bg` i `entrypoint` równy `cli`, a dopasowanie poniżej znajduje proces. Rozmowa zamknięta albo opuszczona przez `/clear` lub `/resume` nie ma przycisku. Kliknięcie wyciąga okno procesu na wierzch, a sesję z grupy "czeka na Ciebie" albo "niepewny" oznacza jako przejrzaną (jak przycisk ✓). Aplikacja nic nie zapisuje w `.claude`.
 
 Procesy na hoście (`HostProcess`: pid, rodzic, czas startu, terminal, argumenty, katalog roboczy) aplikacja czyta z jądra (`sysctl`, `proc_pidinfo`) co 5 s, po każdej zmianie plików i w chwili kliknięcia. Zamknięcie okna nie zmienia żadnego pliku, więc przycisk znika najpóźniej po 5 s; gdy proces zniknął przed kliknięciem, przycisk znika od razu.
 

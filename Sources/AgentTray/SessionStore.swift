@@ -59,15 +59,17 @@ final class SessionStore {
         acknowledged[row.id] = nil
     }
 
-    /// Brings the window the session is open in to the front. When the process is gone by
-    /// now, the button disappears instead.
+    /// Brings the window the session is open in to the front and, when the session waits for
+    /// the user, marks it as seen. When the process is gone by now, the button disappears instead.
     func focusTerminal(_ row: SessionRow) {
         let snapshot = row.snapshot
         let monitor = monitor
         Task {
             let entries = await monitor.registryEntries(directoryPath: snapshot.directoryPath)
             let processes = await Task.detached(priority: .userInitiated) { ProcessTable.read() }.value
-            if !TerminalFocuser.focus(snapshot, entries: entries, processes: processes) {
+            if TerminalFocuser.focus(snapshot, entries: entries, processes: processes) {
+                if row.canAcknowledge { acknowledge(row) }
+            } else {
                 sessionsWithTerminal = await monitor.sessionsWithTerminal(processes: processes)
             }
         }
