@@ -67,7 +67,10 @@ public struct SessionListing: Sendable, Equatable {
             let lhsRank = Self.rankWithinGroup(lhs), rhsRank = Self.rankWithinGroup(rhs)
             if lhsRank != rhsRank { return lhsRank < rhsRank }
             if lhs.snapshot.lastActivity != rhs.snapshot.lastActivity {
-                return lhs.snapshot.lastActivity < rhs.snapshot.lastActivity
+                // Seen sessions are a history: the newest on top.
+                return lhs.group == .acknowledged
+                    ? lhs.snapshot.lastActivity > rhs.snapshot.lastActivity
+                    : lhs.snapshot.lastActivity < rhs.snapshot.lastActivity
             }
             return lhs.id < rhs.id
         }

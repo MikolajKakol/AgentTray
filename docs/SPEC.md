@@ -218,7 +218,7 @@ Lista sesji posortowana grupami:
 4. przejrzane;
 5. przyciemnione (starsze niż 10 h), w dowolnym stanie.
 
-W obrębie grupy: od najdłużej trwającego stanu (najstarsze `lastActivity` pierwsze).
+W obrębie grupy: od najdłużej trwającego stanu (najstarsze `lastActivity` pierwsze). Wyjątek: przejrzane od najnowszego `lastActivity`.
 
 Wiersz sesji:
 
