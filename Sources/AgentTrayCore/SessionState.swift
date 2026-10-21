@@ -39,6 +39,8 @@ public struct SessionFacts: Sendable, Equatable {
     public var lastPromptRecord: String?
     /// Text of the latest human prompt; fallback when there is no `last-prompt`.
     public var lastHumanPrompt: String?
+    /// Text of the first human prompt; title fallback for sessions without a title record.
+    public var firstHumanPrompt: String?
     public var lastMessage: String?
     public var customTitle: String?
     public var aiTitle: String?
@@ -125,7 +127,10 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
             facts.turnEnded = true
         } else if user.originKind == "human" {
             facts.turnEnded = false
-            if let text = user.text { facts.lastHumanPrompt = text }
+            if let text = user.text.map(TranscriptRecord.promptText) {
+                facts.lastHumanPrompt = text
+                if facts.firstHumanPrompt == nil { facts.firstHumanPrompt = text }
+            }
         } else if user.originKind == "task-notification" {
             facts.turnEnded = false
         }
@@ -146,6 +151,12 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
                 break
             }
         }
+        // Desktop app sessions (`sdk-cli`, `remote_desktop`) never write `turn_duration`;
+        // there the final answer's `end_turn` is the only end-of-turn signal.
+        if assistant.stopReason == "end_turn" || assistant.stopReason == "stop_sequence",
+           facts.openToolUses.isEmpty {
+            facts.turnEnded = true
+        }
 
     case .turnDuration(let pending):
         facts.turnEnded = true
@@ -155,7 +166,7 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
         for notification in notifications { facts.finish(notification) }
 
     case .lastPrompt(let prompt):
-        facts.lastPromptRecord = prompt
+        facts.lastPromptRecord = TranscriptRecord.promptText(prompt)
     case .customTitle(let title):
         facts.customTitle = title
     case .aiTitle(let title):

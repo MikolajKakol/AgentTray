@@ -64,9 +64,12 @@ public struct UserRecord: Sendable, Equatable {
 
 public struct AssistantRecord: Sendable, Equatable {
     public var blocks: [AssistantBlock]
+    /// `message.stop_reason`, repeated on every record of one response.
+    public var stopReason: String?
 
-    public init(blocks: [AssistantBlock]) {
+    public init(blocks: [AssistantBlock], stopReason: String? = nil) {
         self.blocks = blocks
+        self.stopReason = stopReason
     }
 }
 
@@ -250,7 +253,22 @@ extension TranscriptRecord {
                 return .other
             }
         }
-        return AssistantRecord(blocks: blocks)
+        return AssistantRecord(blocks: blocks, stopReason: message?["stop_reason"] as? String)
+    }
+
+    /// A prompt as the user typed it. Slash commands are stored as
+    /// `<command-name>/x</command-name><command-args>y</command-args>`; they become `/x y`.
+    public static func promptText(_ text: String) -> String {
+        guard let name = tag("command-name", in: text) else { return text }
+        let args = tag("command-args", in: text) ?? ""
+        return args.isEmpty ? name : "\(name) \(args)"
+    }
+
+    private static func tag(_ name: String, in text: String) -> String? {
+        guard let open = text.range(of: "<\(name)>"),
+              let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex)
+        else { return nil }
+        return text[open.upperBound..<close.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Short description of a tool call shown in the session row.
