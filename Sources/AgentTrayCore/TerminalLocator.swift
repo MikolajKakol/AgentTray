@@ -171,14 +171,15 @@ public enum TerminalLocator {
         return trimmed.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
     }
 
-    /// Equal, or the terminal title is the session title cut off with an ellipsis.
+    /// Equal, or the terminal title is the beginning of the session title: whole words,
+    /// or cut off with an ellipsis. At least 8 characters, so a stray word does not match.
     static func titlesMatch(_ terminal: String, _ session: String) -> Bool {
         if terminal == session { return true }
         for ellipsis in ["…", "..."] where terminal.hasSuffix(ellipsis) {
             let stem = String(terminal.dropLast(ellipsis.count)).trimmingCharacters(in: .whitespaces)
             if stem.count >= 8, session.hasPrefix(stem) { return true }
         }
-        return false
+        return terminal.count >= 8 && session.hasPrefix(terminal + " ")
     }
 
     private static func normalizedPath(_ path: String) -> String {

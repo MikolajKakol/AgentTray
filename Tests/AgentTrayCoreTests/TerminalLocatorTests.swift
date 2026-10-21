@@ -154,6 +154,9 @@ struct TerminalLocatorTests {
     @Test func truncatedTerminalTitleMatches() {
         #expect(TerminalLocator.titlesMatch("bardzo długi tytuł…", "bardzo długi tytuł sesji"))
         #expect(!TerminalLocator.titlesMatch("abc…", "abcdef"))
+        #expect(TerminalLocator.titlesMatch("awaria make", "awaria make setup-dev"))
+        #expect(!TerminalLocator.titlesMatch("awaria ma", "awaria make setup-dev"), "whole words only")
+        #expect(!TerminalLocator.titlesMatch("awaria", "awaria make setup-dev"), "too short")
         #expect(TerminalLocator.normalizedTitle("✳  Say   Hi ") == "say hi")
     }
 }

@@ -71,10 +71,13 @@ enum Ghostty {
     private static let logger = Logger(subsystem: "local.agenttray", category: "ghostty")
 
     /// `tty` exists only after 1.3.1; the `try` leaves it empty on older versions.
+    /// Separators are set before `tell`: inside it `tab` means Ghostty's tab class, not the character.
     static func surfaces() -> [TerminalSurface]? {
         let source = """
+        set fieldSeparator to character id 9
+        set lineSeparator to character id 10
+        set output to ""
         tell application id "\(bundleIdentifier)"
-            set output to ""
             repeat with t in terminals
                 set surfaceId to ""
                 set ttyName to ""
@@ -92,10 +95,10 @@ enum Ghostty {
                 try
                     set surfaceTitle to (name of t) as text
                 end try
-                set output to output & surfaceId & tab & ttyName & tab & surfaceDirectory & tab & surfaceTitle & linefeed
+                set output to output & surfaceId & fieldSeparator & ttyName & fieldSeparator & surfaceDirectory & fieldSeparator & surfaceTitle & lineSeparator
             end repeat
-            return output
         end tell
+        return output
         """
         guard let output = run(source) else { return nil }
         return output.split(separator: "\n").compactMap { line in
