@@ -1,5 +1,4 @@
 import AgentTrayCore
-import AppKit
 import Foundation
 import Observation
 
@@ -10,6 +9,9 @@ final class SessionStore {
     private(set) var sessions: [SessionSnapshot] = []
     private(set) var trackedDirectories: [TrackedDirectory] = []
     private(set) var matchCounts: [String: Int] = [:]
+    /// Sessions open in a live terminal process; only these get the "show terminal" button.
+    /// Closing a window changes no file, so this is also refreshed on a timer.
+    private(set) var sessionsWithTerminal: Set<String> = []
     /// Ticks every second so relative times and the uncertain-state threshold stay current.
     private(set) var now = Date()
     /// Sessions marked as seen: session id to its `acknowledgementMarker` at that moment.
@@ -57,7 +59,8 @@ final class SessionStore {
         acknowledged[row.id] = nil
     }
 
-    /// Brings the window the session is open in to the front; beeps when there is none.
+    /// Brings the window the session is open in to the front. When the process is gone by
+    /// now, the button disappears instead.
     func focusTerminal(_ row: SessionRow) {
         let snapshot = row.snapshot
         let monitor = monitor
@@ -65,9 +68,14 @@ final class SessionStore {
             let entries = await monitor.registryEntries(directoryPath: snapshot.directoryPath)
             let processes = await Task.detached(priority: .userInitiated) { ProcessTable.read() }.value
             if !TerminalFocuser.focus(snapshot, entries: entries, processes: processes) {
-                NSSound.beep()
+                sessionsWithTerminal = await monitor.sessionsWithTerminal(processes: processes)
             }
         }
+    }
+
+    private func refreshTerminals() async {
+        let processes = await Task.detached(priority: .utility) { ProcessTable.read() }.value
+        sessionsWithTerminal = await monitor.sessionsWithTerminal(processes: processes)
     }
 
     func start() {
@@ -85,6 +93,12 @@ final class SessionStore {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 self?.now = Date()
+            }
+        })
+        timers.append(Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                await self?.refreshTerminals()
             }
         })
         timers.append(Task { [weak self] in
@@ -120,5 +134,7 @@ final class SessionStore {
         matchCounts = update.matchCounts
         now = Date()
         watcher?.watch(update.watchPaths)
+        // `/clear` and `/resume` rewrite `sessions/*.json`: the button moves with the conversation.
+        Task { await refreshTerminals() }
     }
 }

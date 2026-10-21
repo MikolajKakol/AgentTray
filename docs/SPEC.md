@@ -238,9 +238,9 @@ Pusta lista: tekst "Brak aktywnych sesji" i liczba śledzonych katalogów.
 
 ### Przejście do terminala
 
-Wiersz sesji, której najnowszy plik `sessions/<pid>.json` ma `kind` inny niż `bg` i `entrypoint` równy `cli`, ma przycisk "Pokaż okno terminala". Po kliknięciu aplikacja szuka żywego procesu, który ma tę rozmowę otwartą, i wyciąga jego okno na wierzch. Gdy nie znajdzie, wydaje dźwięk systemowy. Nic nie zapisuje.
+Wiersz sesji ma przycisk "Pokaż okno terminala" tylko wtedy, gdy żywy proces ma tę rozmowę otwartą w terminalu: najnowszy plik `sessions/<pid>.json` z tą sesją ma `kind` inny niż `bg` i `entrypoint` równy `cli`, a dopasowanie poniżej znajduje proces. Rozmowa zamknięta albo opuszczona przez `/clear` lub `/resume` nie ma przycisku. Kliknięcie wyciąga okno procesu na wierzch. Aplikacja nic nie zapisuje.
 
-Proces na hoście (`HostProcess`: pid, rodzic, czas startu, terminal, argumenty, katalog roboczy) aplikacja czyta z jądra (`sysctl`, `proc_pidinfo`) w chwili kliknięcia.
+Procesy na hoście (`HostProcess`: pid, rodzic, czas startu, terminal, argumenty, katalog roboczy) aplikacja czyta z jądra (`sysctl`, `proc_pidinfo`) co 5 s, po każdej zmianie plików i w chwili kliknięcia. Zamknięcie okna nie zmienia żadnego pliku, więc przycisk znika najpóźniej po 5 s; gdy proces zniknął przed kliknięciem, przycisk znika od razu.
 
 Sesje z kontenerów Speedwave. Katalog `.claude` ma postać `<dataDir>/claude-home/<projekt>/.claude`, np. `~/.speedwave/claude-home/resql/.claude`. Polecenie `speedwave` w terminalu uruchamia na hoście `ssh -F <dataDir>/lima/<vm>/ssh.config -t lima-<vm> -- sudo nerdctl exec -it … <prefiks>_<projekt>_claude env SPW_SESSION_INSTANCE_ID=<uuid> /usr/local/bin/claude …`. Prefiks to nazwa `dataDir` bez kropki (`speedwave`, `speedwave-dev`). Jeden taki `ssh` to jedno okno i jeden proces `claude` w kontenerze. Dopasowanie:
 

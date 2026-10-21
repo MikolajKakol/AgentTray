@@ -35,6 +35,7 @@ struct PopoverView: View {
                                     row: row,
                                     now: store.now,
                                     isExpanded: expanded.contains(row.id),
+                                    hasTerminal: store.sessionsWithTerminal.contains(row.id),
                                     toggle: { toggle(row.id) },
                                     acknowledge: { store.acknowledge(row) },
                                     restore: { store.unacknowledge(row) },
@@ -129,6 +130,7 @@ struct SessionRowView: View {
     let row: SessionRow
     let now: Date
     let isExpanded: Bool
+    let hasTerminal: Bool
     let toggle: () -> Void
     let acknowledge: () -> Void
     let restore: () -> Void
@@ -177,7 +179,7 @@ struct SessionRowView: View {
 
     @ViewBuilder
     private var terminalButton: some View {
-        if snapshot.isTerminalSession {
+        if hasTerminal {
             Button(action: focusTerminal) {
                 Image(systemName: "macwindow")
                     .imageScale(.large)
