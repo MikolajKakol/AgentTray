@@ -114,6 +114,8 @@ Fakty o formacie, zweryfikowane na prawdziwych transkryptach:
 - Uruchomienie subagenta w tle: `toolUseResult` z `isAsync: true`, `status: "async_launched"`, `agentId`.
 - Subagent na pierwszym planie: `tool_use` o nazwie `Agent` bez wyniku do czasu zakończenia; wynik ma `toolUseResult.status: "completed"`.
 - Zakończenie zadania w tle: rekord `queue-operation` z `operation: "enqueue"` i `content` zawierającym `<task-notification>` z `<task-id>`, `<tool-use-id>` i `<status>completed</status>`. Następnie, gdy sesja go przetworzy, rekord `user` z `origin.kind == "task-notification"` i tą samą treścią.
+- Uruchomienie `Monitor` (Claude Code 2.1.306): `toolUseResult` z `taskId`, `timeoutMs` i `persistent`, bez `backgroundTaskId`. Każda linia wyjścia monitora to `<task-notification>` z tym samym `<task-id>`, `<summary>Monitor event: "…"</summary>` i `<event>`, bez `<status>`; monitor działa dalej. Koniec strumienia to `<task-notification>` z `<status>completed</status>`. Wygaśnięcie to `<task-notification>` bez `<status>` z `<event>` zaczynającym się od `[Monitor expired`.
+- Zatrzymanie zadania przez `TaskStop` nie daje `<task-notification>`; wynik `TaskStop` ma `toolUseResult` z `message`, `task_id`, `task_type` i `command`.
 - `system/turn_duration` ma opcjonalne pole `pendingBackgroundAgentCount`, gdy w momencie końca tury działają subagenci w tle.
 - Sesje uruchomione z aplikacji desktopowej (pole `entrypoint`: `sdk-cli` w Speedwave Desktop, `remote_desktop` w Claude Code 2.1.306) w ogóle nie zapisują `system/turn_duration`. Koniec tury to tam tylko ostatni rekord `assistant` ze `stop_reason: end_turn`. Sesje z terminala (`entrypoint: cli`) zapisują `turn_duration`.
 - Po `end_turn` hook Stop może zablokować koniec tury: dopisuje rekord `user` z `isMeta: true` (treść hooka), a agent pracuje dalej kolejnymi rekordami `assistant`.
@@ -123,7 +125,6 @@ Fakty o formacie, zweryfikowane na prawdziwych transkryptach:
 
 Niezweryfikowane (brak przykładów w dostępnych transkryptach; potwierdzić na prawdziwej sesji i dopisać fixture):
 
-- format wyniku narzędzia `Monitor` i rekordu jego zakończenia lub wygaśnięcia;
 - format `ScheduleWakeup` i rekordu wybudzenia;
 - wartości `<status>` w `<task-notification>` inne niż `completed` (zakładamy `failed`, `killed`, `timeout`);
 - rekord przerwania tury przez użytkownika (Esc/Ctrl+C); zakładamy rekord `user` z treścią zaczynającą się od `[Request interrupted by user`;
@@ -136,7 +137,7 @@ Niezweryfikowane (brak przykładów w dostępnych transkryptach; potwierdzić na
 Dla każdej sesji parser utrzymuje, przetwarzając rekordy po kolei:
 
 - `openToolUses`: mapa `tool_use.id` na `(name, input, timestamp)` dla wywołań bez wyniku;
-- `backgroundTasks`: zbiór identyfikatorów zadań w tle uruchomionych i jeszcze niezakończonych. Dodanie: `toolUseResult.backgroundTaskId` albo `toolUseResult.agentId` przy `status == "async_launched"`. Usunięcie: `<task-id>` z dowolnego `<task-notification>` (w `queue-operation` albo w rekordzie `user`). Rodzaj zadania (`agent` albo `task`) wynika ze sposobu uruchomienia;
+- `backgroundTasks`: zbiór identyfikatorów zadań w tle uruchomionych i jeszcze niezakończonych. Dodanie: `toolUseResult.backgroundTaskId`, `toolUseResult.agentId` przy `status == "async_launched"` albo `toolUseResult.taskId` z `timeoutMs` (`Monitor`). Usunięcie: `<task-id>` z `<task-notification>` (w `queue-operation` albo w rekordzie `user`), z wyjątkiem zdarzeń `Monitor` (`<event>` bez `<status>`, poza zdarzeniem wygaśnięcia), albo `toolUseResult.task_id` z wyniku `TaskStop`. Rodzaj zadania (`agent` albo `task`) wynika ze sposobu uruchomienia; `Monitor` to `task`. Monitor bez `persistent: true` ma termin: `timestamp` wyniku plus `timeoutMs`; po terminie nie liczy się do `monitoring`, nawet gdy powiadomienie o wygaśnięciu nie dotarło;
 - `pendingBackgroundAgents`: `pendingBackgroundAgentCount` z ostatniego `turn_duration`, pomniejszone o powiadomienia o subagentach, które przyszły po nim; brak pola oznacza 0;
 - `turnEnded`: `true` po rekordzie `turn_duration`, po rekordzie przerwania albo po rekordzie `assistant` ze `stop_reason` równym `end_turn` lub `stop_sequence`, jeśli po nim `openToolUses` jest puste; `false` po promptcie użytkownika, po rekordzie `user` z `origin.kind == "task-notification"` i po każdym innym rekordzie `assistant`;
 - `permissionMode`: wartość z ostatniego `permission-mode`;
@@ -158,7 +159,7 @@ Stan wyznacza się regułami w tej kolejności; wygrywa pierwsza pasująca.
 | `waitingForSubagents(n)` | w `openToolUses` jest `Agent` lub `Task` (n = ich liczba), albo `turnEnded` i `pendingBackgroundAgents > 0` (n = ta liczba) | pracuje |
 | `runningTool(name, summary)` | w `openToolUses` jest inne narzędzie i (`permissionMode == "bypassPermissions"` albo wywołanie trwa krócej niż próg niepewności) | pracuje |
 | `maybeAwaitingPermission(name, summary)` | w `openToolUses` jest inne narzędzie, tryb inny niż `bypassPermissions` i wywołanie trwa co najmniej próg niepewności (domyślnie 10 s) | niepewny |
-| `monitoring(n)` | `turnEnded` i w `backgroundTasks` jest n > 0 zadań rodzaju `task` | pracuje |
+| `monitoring(n)` | `turnEnded` i w `backgroundTasks` jest n > 0 zadań rodzaju `task` przed terminem | pracuje |
 | `yourTurn` | `turnEnded` | czeka na Ciebie |
 | `thinking` | pozostałe przypadki (tura trwa, brak otwartych narzędzi) | pracuje |
 
@@ -217,7 +218,7 @@ Lista sesji posortowana grupami:
 4. przejrzane;
 5. przyciemnione (starsze niż 10 h), w dowolnym stanie.
 
-W obrębie grupy: od najdłużej trwającego stanu (najstarsze `lastActivity` pierwsze).
+W obrębie grupy: od najdłużej trwającego stanu (najstarsze `lastActivity` pierwsze). Wyjątek: przejrzane od najnowszego `lastActivity`.
 
 Wiersz sesji:
 
@@ -282,7 +283,7 @@ Rdzeń modelu stanów to czysta funkcja: `reduce(state: SessionFacts, record: Tr
 
 ## Testy
 
-Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295 (01–09) i 2.1.306 (10–11). Oczekiwane wyniki:
+Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295 (01–09) i 2.1.306 (10–12). Oczekiwane wyniki:
 
 | Fixture | Oczekiwany stan | Dodatkowo |
 |---|---|---|
@@ -297,6 +298,7 @@ Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `f
 | `09-background-bash.jsonl` | `monitoring(1)` | |
 | `10-desktop-turn-ended.jsonl` | `yourTurn` | sesja desktopowa bez `turn_duration`, `entrypoint: remote_desktop`, Claude Code 2.1.306 |
 | `11-desktop-stop-hook-continuation.jsonl` | `monitoring(1)` | `yourTurn` po pierwszym `end_turn`, pracuje dalej po rekordzie `isMeta` z hooka Stop; `lastPrompt` = "Scal zmiany do main" |
+| `12-monitor.jsonl` | `yourTurn` | `monitoring(1)` po uruchomieniu `Monitor` i po jego zdarzeniu (`<event>` bez `<status>`); `yourTurn` po terminie `timeoutMs` i po `<status>completed</status>` |
 
 `sessions-3398.json` testuje dekodowanie rejestru sesji, a `subagent.meta.json` jest próbką formatu metadanych subagenta (nieużywaną przez aplikację).
 
@@ -327,7 +329,6 @@ Każdy z nich wymaga uruchomienia prawdziwej sesji Claude Code, zapisania fragme
 
 - ścieżka katalogów home kontenerów Speedwave na macOS (do wpisania w ustawieniach i w README); z kodu Speedwave wynika `~/.speedwave/claude-home/<projekt>` (instalacja deweloperska: `~/.speedwave-dev/…`);
 - czy tytuł terminala ustawiany przez Claude Code to `aiTitle` z transkryptu, czy osobno wygenerowany temat; od tego zależy, jak często przejście do terminala trafia po tytule;
-- format zakończenia i wygaśnięcia `Monitor` oraz to, czy jego uruchomienie zwraca `backgroundTaskId`;
 - `ScheduleWakeup` (`/loop`): czy zaplanowane wybudzenie powinno dawać stan `monitoring`; jeśli tak, reguła na podstawie `input.delaySeconds` i `timestamp` wywołania;
 - rekord przerwania tury;
 - statusy `<task-notification>` inne niż `completed`.

@@ -179,12 +179,12 @@ struct SessionListingTests {
         let yourTurn = facts([Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3)])
         let uncertain = facts([Line.prompt("a"), Line.toolUse("t", "Bash", at: 5)])
         let turn = snapshot("turn", yourTurn, idle: 1)
-        let tool = snapshot("tool", uncertain, idle: 1)
+        let tool = snapshot("tool", uncertain, idle: 1.5)
         let other = snapshot("other", yourTurn, idle: 2)
         let acknowledged = ["turn": turn.acknowledgementMarker, "tool": tool.acknowledgementMarker]
 
         let listing = SessionListing(sessions: [turn, tool, other], thresholds: .default, now: now, acknowledged: acknowledged)
-        #expect(listing.rows.map(\.id) == ["other", "tool", "turn"])
+        #expect(listing.rows.map(\.id) == ["other", "turn", "tool"], "seen sessions: newest first")
         #expect(listing.rows.map(\.group) == [.waitingForYou, .acknowledged, .acknowledged])
         #expect(listing.waitingCount == 1)
         #expect(!listing.hasUncertain)

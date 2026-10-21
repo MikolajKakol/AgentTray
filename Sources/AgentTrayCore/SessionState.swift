@@ -24,6 +24,9 @@ public struct SessionFacts: Sendable, Equatable {
     public var openToolUses: [String: OpenToolUse] = [:]
     /// Background tasks started and not yet finished, by task id.
     public var backgroundTasks: [String: BackgroundTask.Kind] = [:]
+    /// When Claude Code kills a background task that has a timeout (`Monitor`).
+    /// Covers a lost expiry notification.
+    public var backgroundTaskDeadlines: [String: Date] = [:]
     public var pendingBackgroundAgents = 0
     /// Ids of tasks already reported finished. A notification shows up twice
     /// (queued, then delivered); this keeps `pendingBackgroundAgents` from dropping twice.
@@ -119,7 +122,11 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
         for id in user.toolResultIds { facts.openToolUses[id] = nil }
         if let task = user.launchedBackgroundTask, !facts.finishedTaskIds.contains(task.id) {
             facts.backgroundTasks[task.id] = task.kind
+            if let timeout = task.timeout, let timestamp = record.timestamp {
+                facts.backgroundTaskDeadlines[task.id] = timestamp.addingTimeInterval(timeout)
+            }
         }
+        if let id = user.stoppedTaskId { facts.finish(taskId: id, summary: nil) }
         for notification in user.notifications { facts.finish(notification) }
 
         if user.isMeta { break }
@@ -192,10 +199,16 @@ extension TranscriptRecord {
 
 extension SessionFacts {
     fileprivate mutating func finish(_ notification: TaskNotification) {
-        guard let id = notification.taskId, !finishedTaskIds.contains(id) else { return }
+        guard let id = notification.taskId, !notification.isProgressEvent else { return }
+        finish(taskId: id, summary: notification.summary)
+    }
+
+    fileprivate mutating func finish(taskId id: String, summary: String?) {
+        guard !finishedTaskIds.contains(id) else { return }
         finishedTaskIds.insert(id)
+        backgroundTaskDeadlines[id] = nil
         let kind = backgroundTasks.removeValue(forKey: id)
-        let isAgent = kind == .agent || (kind == nil && notification.summary?.hasPrefix("Agent ") == true)
+        let isAgent = kind == .agent || (kind == nil && summary?.hasPrefix("Agent ") == true)
         if isAgent, pendingBackgroundAgents > 0 {
             pendingBackgroundAgents -= 1
         }
@@ -229,7 +242,9 @@ public func classify(facts: SessionFacts, settings: Thresholds, now: Date) -> Se
     }
 
     if facts.turnEnded {
-        let tasks = facts.backgroundTasks.values.filter { $0 == .task }.count
+        let tasks = facts.backgroundTasks.filter { id, kind in
+            kind == .task && (facts.backgroundTaskDeadlines[id].map { $0 > now } ?? true)
+        }.count
         return tasks > 0 ? .monitoring(tasks) : .yourTurn
     }
     return .thinking

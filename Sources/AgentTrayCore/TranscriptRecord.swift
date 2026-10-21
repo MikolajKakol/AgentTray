@@ -39,6 +39,9 @@ public struct UserRecord: Sendable, Equatable {
     public var toolResultIds: [String]
     /// Background task started by the tool whose result this record carries.
     public var launchedBackgroundTask: BackgroundTask?
+    /// Background task stopped by the `TaskStop` call whose result this record carries.
+    /// A stopped task gets no `<task-notification>`.
+    public var stoppedTaskId: String?
     /// The record says the user interrupted the turn (`[Request interrupted by user…`).
     public var isInterrupt: Bool
     public var notifications: [TaskNotification]
@@ -49,6 +52,7 @@ public struct UserRecord: Sendable, Equatable {
         text: String? = nil,
         toolResultIds: [String] = [],
         launchedBackgroundTask: BackgroundTask? = nil,
+        stoppedTaskId: String? = nil,
         isInterrupt: Bool = false,
         notifications: [TaskNotification] = []
     ) {
@@ -57,6 +61,7 @@ public struct UserRecord: Sendable, Equatable {
         self.text = text
         self.toolResultIds = toolResultIds
         self.launchedBackgroundTask = launchedBackgroundTask
+        self.stoppedTaskId = stoppedTaskId
         self.isInterrupt = isInterrupt
         self.notifications = notifications
     }
@@ -83,16 +88,19 @@ public struct BackgroundTask: Sendable, Equatable, Hashable {
     public enum Kind: String, Sendable {
         /// A subagent started with `run_in_background`.
         case agent
-        /// Any other background task, e.g. a background Bash command.
+        /// Any other background task, e.g. a background Bash command or a `Monitor`.
         case task
     }
 
     public var id: String
     public var kind: Kind
+    /// How long the task may run before Claude Code kills it (`Monitor` only).
+    public var timeout: TimeInterval?
 
-    public init(id: String, kind: Kind) {
+    public init(id: String, kind: Kind, timeout: TimeInterval? = nil) {
         self.id = id
         self.kind = kind
+        self.timeout = timeout
     }
 }
 
@@ -102,12 +110,22 @@ public struct TaskNotification: Sendable, Equatable {
     public var toolUseId: String?
     public var status: String?
     public var summary: String?
+    /// `<event>`: one line of `Monitor` output, or the monitor's expiry notice.
+    public var event: String?
 
-    public init(taskId: String? = nil, toolUseId: String? = nil, status: String? = nil, summary: String? = nil) {
+    public init(taskId: String? = nil, toolUseId: String? = nil, status: String? = nil, summary: String? = nil, event: String? = nil) {
         self.taskId = taskId
         self.toolUseId = toolUseId
         self.status = status
         self.summary = summary
+        self.event = event
+    }
+
+    /// A `Monitor` event: the task goes on running. Only the final notification
+    /// carries `<status>`; an expired monitor reports it in `<event>` without one.
+    public var isProgressEvent: Bool {
+        guard status == nil, let event else { return false }
+        return !event.hasPrefix("[Monitor expired")
     }
 
     /// Extracts every `<task-notification>` block from a message.
@@ -121,7 +139,8 @@ public struct TaskNotification: Sendable, Equatable {
                 taskId: tag("task-id", in: body),
                 toolUseId: tag("tool-use-id", in: body),
                 status: tag("status", in: body),
-                summary: tag("summary", in: body)
+                summary: tag("summary", in: body),
+                event: tag("event", in: body)
             ))
             guard let bodyEnd else { break }
             searchRange = bodyEnd.upperBound..<text.endIndex
@@ -234,6 +253,13 @@ extension TranscriptRecord {
                 user.launchedBackgroundTask = BackgroundTask(id: id, kind: .task)
             } else if result["status"] as? String == "async_launched", let id = result["agentId"] as? String {
                 user.launchedBackgroundTask = BackgroundTask(id: id, kind: .agent)
+            } else if let id = result["taskId"] as? String, !id.isEmpty, let timeoutMs = intValue(result["timeoutMs"]) {
+                // `Monitor`: `{"taskId", "timeoutMs", "persistent"}`.
+                let timeout = result["persistent"] as? Bool == true ? nil : TimeInterval(timeoutMs) / 1000
+                user.launchedBackgroundTask = BackgroundTask(id: id, kind: .task, timeout: timeout)
+            } else if let id = result["task_id"] as? String, !id.isEmpty, result["task_type"] != nil {
+                // `TaskStop`: `{"message", "task_id", "task_type", "command"}`.
+                user.stoppedTaskId = id
             }
         }
         return user

@@ -95,6 +95,29 @@ struct FixtureTests {
         #expect(all.lastMessage == "Scalone do main.")
     }
 
+    // Fixture 12 follows a real `Monitor` run on Claude Code 2.1.306: every output line is a
+    // `<task-notification>` with `<event>` and no `<status>`; only the last one has `<status>`.
+    @Test func monitorStaysMonitoringThroughItsEvents() throws {
+        let lines = try String(contentsOf: Fixtures.url("12-monitor.jsonl"), encoding: .utf8)
+            .split(separator: "\n").map { String($0) + "\n" }
+        let endTurns = lines.indices.filter { lines[$0].contains("\"end_turn\"") }
+        #expect(endTurns.count == 3)
+
+        let started = try facts(from: Array(lines[...endTurns[0]]))
+        #expect(started.backgroundTasks == ["b0000002": .task])
+        #expect(classify(facts: started, settings: .default, now: fixtureTime(30)) == .monitoring(1))
+
+        let afterEvent = try facts(from: Array(lines[...endTurns[1]]))
+        #expect(classify(facts: afterEvent, settings: .default, now: fixtureTime(120)) == .monitoring(1))
+        // The monitor dies 30 minutes after it started even if the expiry notice is lost.
+        #expect(classify(facts: afterEvent, settings: .default, now: fixtureTime(4.2 + 1800)) == .yourTurn)
+
+        let ended = try Fixtures.facts("12-monitor.jsonl")
+        #expect(ended.backgroundTasks.isEmpty)
+        #expect(classify(facts: ended, settings: .default, now: fixtureTime(400)) == .yourTurn)
+        #expect(ended.lastMessage == "Testy e2e przeszły.")
+    }
+
     @Test func sessionRegistry() throws {
         let entry = try SessionRegistryEntry.decode(Data(contentsOf: Fixtures.url("sessions-3398.json")))
         #expect(entry.sessionId == "11111111-2222-3333-4444-555555555555")
@@ -106,7 +129,7 @@ struct FixtureTests {
 
     @Test func noFixtureLineIsInvalid() throws {
         let names = try FileManager.default.contentsOfDirectory(atPath: Fixtures.directory.path).filter { $0.hasSuffix(".jsonl") }
-        #expect(names.count == 11)
+        #expect(names.count == 12)
         for name in names {
             let reader = TranscriptReader(url: Fixtures.url(name))
             try reader.update()
