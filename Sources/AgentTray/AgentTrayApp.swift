@@ -1,4 +1,5 @@
 import AgentTrayCore
+import AppKit
 import SwiftUI
 
 @main
@@ -7,6 +8,7 @@ struct AgentTrayApp: App {
     @State private var store: SessionStore
 
     init() {
+        SingleInstance.exitIfAlreadyRunning()
         let settings = AppSettings()
         let store = SessionStore(settings: settings)
         _settings = State(initialValue: settings)
@@ -49,5 +51,18 @@ enum MenuBarIcon {
     static func symbol(waitingCount: Int, hasUncertain: Bool) -> String {
         if hasUncertain { return "questionmark.circle" }
         return waitingCount > 0 ? "circle.grid.2x2.fill" : "circle.grid.2x2"
+    }
+}
+
+enum SingleInstance {
+    /// Quits when another copy with the same bundle id is running, e.g. one started at
+    /// login and one opened by hand, or one from the DMG and one from Applications.
+    /// Unbundled builds (`swift run`) have no bundle id and are not checked.
+    static func exitIfAlreadyRunning() {
+        guard let bundleId = Bundle.main.bundleIdentifier else { return }
+        let me = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+            .filter { $0.processIdentifier != me && !$0.isTerminated }
+        if !others.isEmpty { exit(0) }
     }
 }

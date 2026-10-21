@@ -21,8 +21,8 @@ struct PopoverView: View {
                 .frame(maxWidth: .infinity)
                 .padding(24)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                FittedScrollView(maxHeight: 560) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(sections(listing.rows), id: \.group) { section in
                             Text(Self.title(of: section.group))
                                 .font(.caption.weight(.semibold))
@@ -31,25 +31,31 @@ struct PopoverView: View {
                                 .padding(.top, 10)
                                 .padding(.bottom, 2)
                             ForEach(section.rows) { row in
-                                SessionRowView(row: row, now: store.now, isExpanded: expanded.contains(row.id)) {
-                                    if expanded.contains(row.id) {
-                                        expanded.remove(row.id)
-                                    } else {
-                                        expanded.insert(row.id)
-                                    }
-                                }
+                                SessionRowView(
+                                    row: row,
+                                    now: store.now,
+                                    isExpanded: expanded.contains(row.id),
+                                    toggle: { toggle(row.id) },
+                                    acknowledge: { store.acknowledge(row) },
+                                    restore: { store.unacknowledge(row) }
+                                )
                                 Divider().padding(.leading, 12)
                             }
                         }
                     }
                 }
-                .frame(maxHeight: 560)
             }
             Divider()
             HStack {
                 Button("Ustawienia…") {
                     NSApplication.shared.activate()
                     openSettings()
+                }
+                if listing.rows.contains(where: \.canAcknowledge) {
+                    Button("Przejrzyj wszystkie") {
+                        store.acknowledgeAll()
+                    }
+                    .help("Oznacz wszystkie czekające sesje jako przejrzane; wrócą, gdy coś się w nich zmieni")
                 }
                 Spacer()
                 Button("Zakończ") {
@@ -61,6 +67,14 @@ struct PopoverView: View {
             .padding(.vertical, 8)
         }
         .frame(width: 400)
+    }
+
+    private func toggle(_ id: String) {
+        if expanded.contains(id) {
+            expanded.remove(id)
+        } else {
+            expanded.insert(id)
+        }
     }
 
     private struct RowSection {
@@ -86,8 +100,27 @@ struct PopoverView: View {
         case .waitingForYou: "Czeka na Ciebie"
         case .uncertain: "Może czekać na zgodę"
         case .working: "Pracuje"
+        case .acknowledged: "Przejrzane"
         case .dimmed: "Nieaktywne"
         }
+    }
+}
+
+/// A scroll view as tall as its content, up to `maxHeight`.
+/// A plain `ScrollView` with only a maximum height can collapse to almost nothing
+/// inside a `MenuBarExtra` window, hiding the whole list.
+struct FittedScrollView<Content: View>: View {
+    let maxHeight: CGFloat
+    @ViewBuilder let content: Content
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView {
+            content
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: min(contentHeight, maxHeight))
     }
 }
 
@@ -96,32 +129,39 @@ struct SessionRowView: View {
     let now: Date
     let isExpanded: Bool
     let toggle: () -> Void
+    let acknowledge: () -> Void
+    let restore: () -> Void
 
     private var snapshot: SessionSnapshot { row.snapshot }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            VStack(alignment: .leading, spacing: 3) {
-                header
-                Text(StatusText.statusLine(for: row.status, lastActivity: snapshot.lastActivity, now: now))
-                    .font(.subheadline)
-                    .foregroundStyle(statusColor)
-                if !isExpanded {
-                    if let prompt = snapshot.lastPrompt {
-                        Text(prompt)
-                            .font(.callout)
-                            .lineLimit(2)
-                    }
-                    if let message = messageLine {
-                        Text(message)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    header
+                    Text(StatusText.statusLine(for: row.status, lastActivity: snapshot.lastActivity, now: now))
+                        .font(.subheadline)
+                        .foregroundStyle(statusColor)
+                    if !isExpanded {
+                        if let prompt = snapshot.lastPrompt {
+                            Text(prompt)
+                                .font(.callout)
+                                .lineLimit(2)
+                        }
+                        if let message = messageLine {
+                            Text(message)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: toggle)
+
+                acknowledgeButton
             }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: toggle)
 
             if isExpanded {
                 expandedText
@@ -129,7 +169,26 @@ struct SessionRowView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .opacity(row.isDimmed ? 0.5 : 1)
+        .opacity(row.isDimmed || row.isAcknowledged ? 0.55 : 1)
+    }
+
+    @ViewBuilder
+    private var acknowledgeButton: some View {
+        if row.canAcknowledge {
+            Button(action: acknowledge) {
+                Image(systemName: "checkmark.circle")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.borderless)
+            .help("Oznacz jako przejrzane: sesja zniknie z licznika do czasu, aż coś się w niej zmieni")
+        } else if row.isAcknowledged {
+            Button(action: restore) {
+                Image(systemName: "arrow.uturn.backward.circle")
+                    .imageScale(.large)
+            }
+            .buttonStyle(.borderless)
+            .help("Przywróć do licznika")
+        }
     }
 
     private var header: some View {
@@ -151,7 +210,7 @@ struct SessionRowView: View {
     }
 
     private var expandedText: some View {
-        ScrollView {
+        FittedScrollView(maxHeight: 240) {
             VStack(alignment: .leading, spacing: 8) {
                 if let prompt = snapshot.lastPrompt {
                     Text(prompt)
@@ -171,14 +230,13 @@ struct SessionRowView: View {
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: 240)
     }
 
     private var statusColor: Color {
-        switch row.status.group {
+        switch row.group {
         case .waitingForYou: .orange
         case .uncertain: .yellow
-        case .working, .dimmed: .secondary
+        case .working, .acknowledged, .dimmed: .secondary
         }
     }
 }

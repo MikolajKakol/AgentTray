@@ -149,6 +149,47 @@ struct SessionListingTests {
         #expect(listing.hasUncertain)
     }
 
+    @Test func acknowledgedSessionsLeaveTheCountUntilTheyChange() {
+        let yourTurn = facts([Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3)])
+        let uncertain = facts([Line.prompt("a"), Line.toolUse("t", "Bash", at: 5)])
+        let turn = snapshot("turn", yourTurn, idle: 1)
+        let tool = snapshot("tool", uncertain, idle: 1)
+        let other = snapshot("other", yourTurn, idle: 2)
+        let acknowledged = ["turn": turn.acknowledgementMarker, "tool": tool.acknowledgementMarker]
+
+        let listing = SessionListing(sessions: [turn, tool, other], thresholds: .default, now: now, acknowledged: acknowledged)
+        #expect(listing.rows.map(\.id) == ["other", "tool", "turn"])
+        #expect(listing.rows.map(\.group) == [.waitingForYou, .acknowledged, .acknowledged])
+        #expect(listing.waitingCount == 1)
+        #expect(!listing.hasUncertain)
+        #expect(listing.rows.map(\.canAcknowledge) == [true, false, false])
+
+        // A new timestamped record (the next turn) brings the session back.
+        let nextTurn = facts([Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3),
+                              Line.prompt("c", at: 10), Line.text("d", at: 11), Line.turnDuration(at: 12)])
+        let changed = snapshot("turn", nextTurn, idle: 0.5)
+        let after = SessionListing(sessions: [changed], thresholds: .default, now: now, acknowledged: acknowledged)
+        #expect(after.rows.map(\.group) == [.waitingForYou])
+        #expect(after.waitingCount == 1)
+    }
+
+    @Test func acknowledgementSurvivesUntimestampedRecords() throws {
+        // An ai-title appended after the turn changes the file but not the marker.
+        let before = facts([Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3)])
+        let after = facts([Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3), Line.aiTitle("Tytuł")])
+        let marker = snapshot("s", before, idle: 1).acknowledgementMarker
+        let listing = SessionListing(sessions: [snapshot("s", after, idle: 0.9)], thresholds: .default, now: now, acknowledged: ["s": marker])
+        #expect(listing.rows.first?.group == .acknowledged)
+        #expect(listing.waitingCount == 0)
+    }
+
+    @Test func workingSessionsIgnoreAcknowledgement() {
+        let thinking = facts([Line.prompt("a")])
+        let s = snapshot("s", thinking, idle: 0.1)
+        let listing = SessionListing(sessions: [s], thresholds: .default, now: now, acknowledged: ["s": s.acknowledgementMarker])
+        #expect(listing.rows.first?.group == .working)
+    }
+
     @Test func thresholdsAreConfigurable() {
         let yourTurn = facts([Line.prompt("a"), Line.text("b"), Line.turnDuration()])
         let thresholds = Thresholds(dimAfter: 3600, hideAfter: 2 * 3600, uncertainAfter: 10)

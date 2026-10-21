@@ -11,6 +11,7 @@ W zakresie:
 - odczyt plików stanu Claude Code z dowolnej liczby katalogów `.claude` podanych jako wzorce z wildcardami;
 - wyznaczanie stanu każdej sesji wyłącznie z plików (transkrypty JSONL i `sessions/*.json`);
 - ikona w pasku menu z licznikiem sesji czekających na użytkownika i popover z listą sesji;
+- oznaczanie sesji jako przejrzanych (stan trzymany w `UserDefaults` aplikacji, nie w `.claude`);
 - okno ustawień.
 
 Poza zakresem (decyzje, nie przeoczenia):
@@ -28,6 +29,7 @@ Poza zakresem (decyzje, nie przeoczenia):
 - Swift 6, SwiftUI, `MenuBarExtra` w stylu `.window`, `@Observable`.
 - Swift Package bez projektu Xcode. Szczegóły builda w `CLAUDE.md`.
 - `LSUIElement = true` (brak ikony w Docku).
+- Jedna instancja: przy starcie aplikacja kończy działanie, jeśli działa już inny proces z tym samym bundle id (np. jeden uruchomiony przy logowaniu, drugi ręcznie).
 - Uruchamianie przy logowaniu przez `SMAppService.mainApp`, przełączane w ustawieniach.
 
 ## Źródła danych
@@ -185,7 +187,17 @@ Niezależnie od stanu:
 - Brak sesji w grupie "czeka na Ciebie": sama ikona (SF Symbol, np. `circle.grid.2x2`).
 - Są takie sesje: ikona z liczbą (np. `2`), wypełniona.
 - Jest co najmniej jedna sesja w stanie `maybeAwaitingPermission`: ikona w wersji z obrysem, niezależnie od licznika. Sesje niepewne nie wliczają się do licznika.
-- Do licznika nie wliczają się sesje przyciemnione.
+- Do licznika nie wliczają się sesje przyciemnione ani przejrzane.
+
+### Przejrzane sesje
+
+Sesja z grupy "czeka na Ciebie" albo "niepewny" może zostać oznaczona jako przejrzana (przycisk w wierszu albo "Przejrzyj wszystkie" w stopce). Aplikacja zapamiętuje wtedy znacznik sesji: `timestamp` jej ostatniego rekordu (gdy brak, `lastActivity`). Sesja pozostaje przejrzana, dopóki znacznik się nie zmieni, czyli do pierwszego nowego rekordu z `timestamp` (nowy prompt, odpowiedź, wynik narzędzia). Rekordy bez `timestamp` dopisywane po końcu tury (`ai-title`, `last-prompt`) nie cofają oznaczenia. Przejrzana sesja:
+
+- nie wlicza się do licznika i nie włącza ikony z obrysem;
+- trafia do osobnej grupy "Przejrzane", wyświetlanej przyciemniona;
+- ma przycisk "Przywróć do licznika".
+
+Sesje pracujące nie są oznaczane. Oznaczenia sesji, które zniknęły z listy, są usuwane.
 
 ### Popover
 
@@ -194,7 +206,8 @@ Lista sesji posortowana grupami:
 1. `askingQuestion`, potem `yourTurn`;
 2. `maybeAwaitingPermission`;
 3. pracujące (`thinking`, `runningTool`, `waitingForSubagents`, `monitoring`);
-4. przyciemnione (starsze niż 10 h), w dowolnym stanie.
+4. przejrzane;
+5. przyciemnione (starsze niż 10 h), w dowolnym stanie.
 
 W obrębie grupy: od najdłużej trwającego stanu (najstarsze `lastActivity` pierwsze).
 
@@ -209,7 +222,9 @@ Kliknięcie wiersza rozwija pełny prompt i pełną wiadomość (przewijane, z m
 
 Etykieta źródła: dla katalogu `~/.claude` tekst "lokalny"; dla pozostałych segment ścieżki dopasowany przez pierwszy `*` we wzorcu, a gdy wzorzec nie ma wildcardów, nazwa katalogu nadrzędnego dla `.claude` (lub dla katalogu home).
 
-Stopka popovera: "Ustawienia…" i "Zakończ".
+Stopka popovera: "Ustawienia…", "Przejrzyj wszystkie" (gdy jest co oznaczyć) i "Zakończ".
+
+Lista i rozwinięty tekst wiersza mają wysokość dopasowaną do zawartości (lista do 560 pt, tekst do 240 pt), dalej przewijają się.
 
 Pusta lista: tekst "Brak aktywnych sesji" i liczba śledzonych katalogów.
 

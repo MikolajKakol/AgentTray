@@ -20,10 +20,23 @@ public enum SessionAge: Sendable, Equatable {
 public struct SessionRow: Sendable, Equatable, Identifiable {
     public var snapshot: SessionSnapshot
     public var status: SessionStatus
-    /// Display group; `.dimmed` for old sessions regardless of their status.
+    /// Display group; `.dimmed` for old sessions regardless of their status,
+    /// `.acknowledged` for waiting or uncertain sessions marked as seen.
     public var group: SessionGroup
     public var id: String { snapshot.id }
     public var isDimmed: Bool { group == .dimmed }
+    public var isAcknowledged: Bool { group == .acknowledged }
+    /// The session asks for attention and can be marked as seen.
+    public var canAcknowledge: Bool { group == .waitingForYou || group == .uncertain }
+}
+
+extension SessionSnapshot {
+    /// Identifies the moment the session last changed. An acknowledgement made at this
+    /// marker lasts until a newer timestamped record arrives. File mtime is not used:
+    /// Claude Code appends untimestamped records (titles, last-prompt) after a turn ends.
+    public var acknowledgementMarker: Date {
+        facts.lastRecordTimestamp ?? lastActivity
+    }
 }
 
 /// Sessions as the popover and the menu bar icon show them at a given moment.
@@ -35,12 +48,18 @@ public struct SessionListing: Sendable, Equatable {
     /// At least one non-dimmed session may be waiting for a permission prompt.
     public var hasUncertain: Bool
 
-    public init(sessions: [SessionSnapshot], thresholds: Thresholds, now: Date) {
+    /// `acknowledged` maps session ids to the `acknowledgementMarker` they were marked seen at.
+    public init(sessions: [SessionSnapshot], thresholds: Thresholds, now: Date, acknowledged: [String: Date] = [:]) {
         rows = sessions.compactMap { snapshot in
             let age = SessionAge(lastActivity: snapshot.lastActivity, thresholds: thresholds, now: now)
             guard age != .hidden else { return nil }
             let status = classify(facts: snapshot.facts, settings: thresholds, now: now)
-            return SessionRow(snapshot: snapshot, status: status, group: age == .dimmed ? .dimmed : status.group)
+            var group = age == .dimmed ? .dimmed : status.group
+            if group == .waitingForYou || group == .uncertain,
+               let marker = acknowledged[snapshot.id], snapshot.acknowledgementMarker <= marker {
+                group = .acknowledged
+            }
+            return SessionRow(snapshot: snapshot, status: status, group: group)
         }
         rows.sort { lhs, rhs in
             if lhs.group != rhs.group { return lhs.group < rhs.group }

@@ -71,6 +71,8 @@ public enum SessionGroup: Int, Sendable, Comparable, CaseIterable {
     case waitingForYou
     case uncertain
     case working
+    /// Waiting or uncertain sessions the user marked as seen; not counted in the menu bar.
+    case acknowledged
     case dimmed
 
     public static func < (lhs: SessionGroup, rhs: SessionGroup) -> Bool { lhs.rawValue < rhs.rawValue }
