@@ -31,6 +31,10 @@ public struct SessionFacts: Sendable, Equatable {
     public var turnEnded = false
     public var permissionMode: String?
     public var lastRecordTimestamp: Date?
+    /// Timestamp of the last record that moved the conversation forward: a non-meta
+    /// `user` record, an `assistant` record, `turn_duration` or a task notification.
+    /// Bookkeeping appended later (away recap, hook summaries, attachments) does not count.
+    public var lastSignificantTimestamp: Date?
     /// Value of the latest `last-prompt` record.
     public var lastPromptRecord: String?
     /// Text of the latest human prompt; fallback when there is no `last-prompt`.
@@ -102,6 +106,9 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
     var facts = state
     if let timestamp = record.timestamp {
         facts.lastRecordTimestamp = max(facts.lastRecordTimestamp ?? timestamp, timestamp)
+        if record.advancesSession {
+            facts.lastSignificantTimestamp = max(facts.lastSignificantTimestamp ?? timestamp, timestamp)
+        }
     }
     if let cwd = record.cwd, !cwd.isEmpty { facts.cwd = cwd }
 
@@ -159,6 +166,17 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
         break
     }
     return facts
+}
+
+extension TranscriptRecord {
+    var advancesSession: Bool {
+        switch kind {
+        case .user(let user): !user.isMeta
+        case .assistant, .turnDuration: true
+        case .queueOperation(_, let notifications): !notifications.isEmpty
+        case .lastPrompt, .customTitle, .aiTitle, .permissionMode, .ignored: false
+        }
+    }
 }
 
 extension SessionFacts {

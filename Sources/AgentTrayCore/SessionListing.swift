@@ -32,10 +32,11 @@ public struct SessionRow: Sendable, Equatable, Identifiable {
 
 extension SessionSnapshot {
     /// Identifies the moment the session last changed. An acknowledgement made at this
-    /// marker lasts until a newer timestamped record arrives. File mtime is not used:
-    /// Claude Code appends untimestamped records (titles, last-prompt) after a turn ends.
+    /// marker lasts until the conversation moves forward. Neither file mtime nor the last
+    /// record's timestamp is used: Claude Code appends titles, `last-prompt`, the away
+    /// recap and other bookkeeping after a turn ends.
     public var acknowledgementMarker: Date {
-        facts.lastRecordTimestamp ?? lastActivity
+        facts.lastSignificantTimestamp ?? facts.lastRecordTimestamp ?? lastActivity
     }
 }
 
