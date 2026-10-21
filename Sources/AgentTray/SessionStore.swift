@@ -1,4 +1,5 @@
 import AgentTrayCore
+import AppKit
 import Foundation
 import Observation
 
@@ -54,6 +55,19 @@ final class SessionStore {
 
     func unacknowledge(_ row: SessionRow) {
         acknowledged[row.id] = nil
+    }
+
+    /// Brings the window the session is open in to the front; beeps when there is none.
+    func focusTerminal(_ row: SessionRow) {
+        let snapshot = row.snapshot
+        let monitor = monitor
+        Task {
+            let entries = await monitor.registryEntries(directoryPath: snapshot.directoryPath)
+            let processes = await Task.detached(priority: .userInitiated) { ProcessTable.read() }.value
+            if !TerminalFocuser.focus(snapshot, entries: entries, processes: processes) {
+                NSSound.beep()
+            }
+        }
     }
 
     func start() {

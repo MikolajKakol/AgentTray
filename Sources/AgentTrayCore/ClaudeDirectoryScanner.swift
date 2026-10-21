@@ -13,11 +13,19 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
     public var lastMessage: String?
     public var lastActivity: Date
     public var facts: SessionFacts
+    /// Canonical path of the `.claude` directory the session comes from.
+    public var directoryPath: String
+    /// `name` from the newest `sessions/<pid>.json` naming this session.
+    public var registryName: String?
+    /// That file belongs to a terminal session (not Speedwave Desktop, not a background job),
+    /// so the session may have a window to bring to the front.
+    public var isTerminalSession: Bool
 
     public init(
         id: String, sessionId: String, sourceLabel: String, title: String,
         workingDirectoryName: String?, lastPrompt: String?, lastMessage: String?,
-        lastActivity: Date, facts: SessionFacts
+        lastActivity: Date, facts: SessionFacts, directoryPath: String = "", registryName: String? = nil,
+        isTerminalSession: Bool = false
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -28,6 +36,9 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
         self.lastMessage = lastMessage
         self.lastActivity = lastActivity
         self.facts = facts
+        self.directoryPath = directoryPath
+        self.registryName = registryName
+        self.isTerminalSession = isTerminalSession
     }
 }
 
@@ -87,6 +98,11 @@ public final class ClaudeDirectoryScanner {
         return snapshots()
     }
 
+    /// Every decodable `sessions/<pid>.json`, including files left behind by finished processes.
+    public var registryEntries: [SessionRegistryEntry] {
+        registryFiles.values.compactMap(\.entry)
+    }
+
     public func snapshots() -> [SessionSnapshot] {
         transcripts.values.compactMap { transcript -> SessionSnapshot? in
             guard let reader = transcript.reader else { return nil }
@@ -107,7 +123,10 @@ public final class ClaudeDirectoryScanner {
                 lastPrompt: facts.lastPrompt,
                 lastMessage: facts.lastMessage,
                 lastActivity: activity,
-                facts: facts
+                facts: facts,
+                directoryPath: directory.url.path,
+                registryName: entry?.name,
+                isTerminalSession: entry?.isTerminalSession ?? false
             )
         }
     }

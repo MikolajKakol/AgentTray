@@ -68,6 +68,11 @@ actor SessionMonitor {
         return makeUpdate()
     }
 
+    /// All registry files of one tracked directory, stale ones included, for finding a session's terminal.
+    func registryEntries(directoryPath: String) -> [SessionRegistryEntry] {
+        scanners[directoryPath]?.registryEntries ?? []
+    }
+
     private func expandPatterns() {
         lastExpansion = Date()
         let home = FileManager.default.homeDirectoryForCurrentUser
