@@ -183,6 +183,34 @@ struct SessionListingTests {
         #expect(listing.waitingCount == 0)
     }
 
+    @Test func recordsThatDoNotAdvanceTheSessionKeepItAcknowledged() {
+        // Claude Code appends timestamped bookkeeping after a turn (e.g. the away recap,
+        // hook summaries, attachments). Their exact recap format is not verified yet,
+        // so these are generic stand-ins for "a timestamped record that is not a turn".
+        let turn = [Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3)]
+        let noise = [
+            Line.json(["type": "system", "subtype": "some-future-subtype", "timestamp": Line.ts(300), "content": "※ recap: …"]),
+            Line.json(["type": "system", "subtype": "stop_hook_summary", "timestamp": Line.ts(301)]),
+            Line.json(["type": "attachment", "timestamp": Line.ts(302)]),
+            Line.json(["type": "cost-state", "timestamp": Line.ts(303)]),
+            Line.json(["type": "user", "isMeta": true, "timestamp": Line.ts(304),
+                       "message": ["role": "user", "content": "<local-command-caveat>…"]]),
+            Line.queueDequeue(at: 305),
+        ]
+        let marker = snapshot("s", facts(turn), idle: 1).acknowledgementMarker
+        let withNoise = snapshot("s", facts(turn + noise), idle: 0.9)
+        #expect(withNoise.facts.lastRecordTimestamp == fixtureTime(305))
+        #expect(withNoise.acknowledgementMarker == marker)
+
+        let listing = SessionListing(sessions: [withNoise], thresholds: .default, now: now, acknowledged: ["s": marker])
+        #expect(listing.rows.first?.group == .acknowledged)
+        #expect(listing.waitingCount == 0)
+
+        // A finished background task does change the session.
+        let notified = snapshot("s", facts(turn + noise + [Line.enqueue(Line.notification(taskId: "x"), at: 400)]), idle: 0.5)
+        #expect(notified.acknowledgementMarker == fixtureTime(400))
+    }
+
     @Test func workingSessionsIgnoreAcknowledgement() {
         let thinking = facts([Line.prompt("a")])
         let s = snapshot("s", thinking, idle: 0.1)

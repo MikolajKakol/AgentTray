@@ -191,7 +191,7 @@ Niezależnie od stanu:
 
 ### Przejrzane sesje
 
-Sesja z grupy "czeka na Ciebie" albo "niepewny" może zostać oznaczona jako przejrzana (przycisk w wierszu albo "Przejrzyj wszystkie" w stopce). Aplikacja zapamiętuje wtedy znacznik sesji: `timestamp` jej ostatniego rekordu (gdy brak, `lastActivity`). Sesja pozostaje przejrzana, dopóki znacznik się nie zmieni, czyli do pierwszego nowego rekordu z `timestamp` (nowy prompt, odpowiedź, wynik narzędzia). Rekordy bez `timestamp` dopisywane po końcu tury (`ai-title`, `last-prompt`) nie cofają oznaczenia. Przejrzana sesja:
+Sesja z grupy "czeka na Ciebie" albo "niepewny" może zostać oznaczona jako przejrzana (przycisk w wierszu albo "Przejrzyj wszystkie" w stopce). Aplikacja zapamiętuje wtedy znacznik sesji: `timestamp` ostatniego rekordu, który posuwa rozmowę naprzód (gdy brak, `timestamp` ostatniego rekordu, a gdy i tego brak, `lastActivity`). Rozmowę posuwają: rekord `user` bez `isMeta` (prompt, wynik narzędzia, powiadomienie o zadaniu), rekord `assistant`, `system/turn_duration` i `queue-operation` z `<task-notification>`. Sesja pozostaje przejrzana, dopóki znacznik się nie zmieni. Nie cofają oznaczenia rekordy dopisywane po końcu tury: `ai-title`, `last-prompt`, podsumowanie po powrocie do terminala ("※ recap"), `system` o innych podtypach (np. `stop_hook_summary`), `attachment`, rekordy `user` z `isMeta: true` i nieznane typy. [Niezweryfikowane] Dokładny format rekordu "recap" nie jest znany; reguła nie zależy od niego, o ile nie jest to rekord `assistant` ani `user` bez `isMeta`. Przejrzana sesja:
 
 - nie wlicza się do licznika i nie włącza ikony z obrysem;
 - trafia do osobnej grupy "Przejrzane", wyświetlanej przyciemniona;

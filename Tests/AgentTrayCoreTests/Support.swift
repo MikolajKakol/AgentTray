@@ -113,6 +113,10 @@ enum Line {
         json(["type": "queue-operation", "operation": "enqueue", "timestamp": ts(seconds), "content": content])
     }
 
+    static func queueDequeue(at seconds: TimeInterval) -> String {
+        json(["type": "queue-operation", "operation": "dequeue", "timestamp": ts(seconds)])
+    }
+
     static func taskNotificationPrompt(_ content: String, at seconds: TimeInterval = 11) -> String {
         json(["type": "user", "timestamp": ts(seconds), "message": ["role": "user", "content": content],
               "origin": ["kind": "task-notification"]])
