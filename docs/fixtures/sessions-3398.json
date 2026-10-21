@@ -1,0 +1,19 @@
+{
+  "pid": 3398,
+  "sessionId": "11111111-2222-3333-4444-555555555555",
+  "cwd": "/workspace",
+  "startedAt": 1792569554606,
+  "procStart": "6411900",
+  "version": "2.1.295",
+  "peerProtocol": 1,
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "linux::pid:[4026532366]",
+  "messagingSocketPath": "/tmp/cc-socks/3398.sock",
+  "name": "workspace-56",
+  "nameSource": "derived",
+  "nameSince": 1792569554606,
+  "status": "busy",
+  "updatedAt": 1792569554592,
+  "statusUpdatedAt": 1792569554592
+}
