@@ -33,6 +33,8 @@ public struct UserRecord: Sendable, Equatable {
     /// `origin.kind`, e.g. `human` or `task-notification`.
     public var originKind: String?
     public var isMeta: Bool
+    /// `isCompactSummary`: the conversation summary Claude Code writes after compacting.
+    public var isCompactSummary: Bool
     /// `message.content` when it is a string, or the joined `text` blocks otherwise.
     public var text: String?
     /// `tool_use_id` of every `tool_result` block.
@@ -49,6 +51,7 @@ public struct UserRecord: Sendable, Equatable {
     public init(
         originKind: String? = nil,
         isMeta: Bool = false,
+        isCompactSummary: Bool = false,
         text: String? = nil,
         toolResultIds: [String] = [],
         launchedBackgroundTask: BackgroundTask? = nil,
@@ -58,6 +61,7 @@ public struct UserRecord: Sendable, Equatable {
     ) {
         self.originKind = originKind
         self.isMeta = isMeta
+        self.isCompactSummary = isCompactSummary
         self.text = text
         self.toolResultIds = toolResultIds
         self.launchedBackgroundTask = launchedBackgroundTask
@@ -216,6 +220,7 @@ extension TranscriptRecord {
         var user = UserRecord()
         user.originKind = (json["origin"] as? [String: Any])?["kind"] as? String
         user.isMeta = json["isMeta"] as? Bool ?? false
+        user.isCompactSummary = json["isCompactSummary"] as? Bool ?? false
 
         let message = json["message"] as? [String: Any]
         var texts: [String] = []

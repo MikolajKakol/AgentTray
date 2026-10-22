@@ -34,9 +34,9 @@ public struct SessionFacts: Sendable, Equatable {
     public var turnEnded = false
     public var permissionMode: String?
     public var lastRecordTimestamp: Date?
-    /// Timestamp of the last record that moved the conversation forward: a non-meta
-    /// `user` record, an `assistant` record, `turn_duration` or a task notification.
-    /// Bookkeeping appended later (away recap, hook summaries, attachments) does not count.
+    /// Timestamp of the last record that moved the conversation forward: a human prompt,
+    /// a tool result, an interrupt, an `assistant` record, `turn_duration` or a task notification.
+    /// Bookkeeping appended later (away recap, compaction, hook summaries, attachments) does not count.
     public var lastSignificantTimestamp: Date?
     /// Value of the latest `last-prompt` record.
     public var lastPromptRecord: String?
@@ -129,7 +129,7 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
         if let id = user.stoppedTaskId { facts.finish(taskId: id, summary: nil) }
         for notification in user.notifications { facts.finish(notification) }
 
-        if user.isMeta { break }
+        if user.isMeta || user.isCompactSummary { break }
         if user.isInterrupt {
             facts.turnEnded = true
         } else if user.originKind == "human" {
@@ -189,11 +189,21 @@ public func reduce(state: SessionFacts, record: TranscriptRecord) -> SessionFact
 extension TranscriptRecord {
     var advancesSession: Bool {
         switch kind {
-        case .user(let user): !user.isMeta
+        case .user(let user): user.advancesSession
         case .assistant, .turnDuration: true
         case .queueOperation(_, let notifications): !notifications.isEmpty
         case .lastPrompt, .customTitle, .aiTitle, .permissionMode, .ignored: false
         }
+    }
+}
+
+extension UserRecord {
+    /// Only `user` records with a known role count. Claude Code also writes `user` records
+    /// on its own while the session is idle, e.g. the summary after compaction.
+    var advancesSession: Bool {
+        guard !isMeta, !isCompactSummary else { return false }
+        return originKind == "human" || originKind == "task-notification"
+            || !toolResultIds.isEmpty || isInterrupt || !notifications.isEmpty
     }
 }
 

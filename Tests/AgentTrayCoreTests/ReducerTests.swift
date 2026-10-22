@@ -41,6 +41,15 @@ struct ReducerTests {
         #expect(result.turnEnded)
     }
 
+    @Test func compactSummaryDoesNotChangePromptOrTurn() throws {
+        let summary = Line.json(["type": "user", "isCompactSummary": true, "timestamp": Line.ts(5),
+                                 "message": ["role": "user", "content": "This session is being continued…"], "origin": ["kind": "human"]])
+        let result = try facts(from: [Line.prompt("Prawdziwy prompt"), Line.text("Gotowe"), Line.turnDuration(), summary])
+        #expect(result.lastHumanPrompt == "Prawdziwy prompt")
+        #expect(result.turnEnded)
+        #expect(result.lastSignificantTimestamp == fixtureTime(3))
+    }
+
     @Test func lastPromptRecordWinsOverHumanRecord() throws {
         let result = try facts(from: [Line.prompt("z rekordu user"), Line.lastPrompt("z last-prompt")])
         #expect(result.lastPrompt == "z last-prompt")
