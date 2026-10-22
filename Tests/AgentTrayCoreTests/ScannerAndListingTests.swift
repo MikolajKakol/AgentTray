@@ -222,10 +222,15 @@ struct SessionListingTests {
             Line.json(["type": "user", "isMeta": true, "timestamp": Line.ts(304),
                        "message": ["role": "user", "content": "<local-command-caveat>…"]]),
             Line.queueDequeue(at: 305),
+            Line.json(["type": "system", "subtype": "compact_boundary", "timestamp": Line.ts(306)]),
+            Line.json(["type": "user", "isCompactSummary": true, "timestamp": Line.ts(307),
+                       "message": ["role": "user", "content": "This session is being continued…"]]),
+            // A `user` record without a known role, e.g. a future kind of bookkeeping.
+            Line.json(["type": "user", "timestamp": Line.ts(308), "message": ["role": "user", "content": "…"]]),
         ]
         let marker = snapshot("s", facts(turn), idle: 1).acknowledgementMarker
         let withNoise = snapshot("s", facts(turn + noise), idle: 0.9)
-        #expect(withNoise.facts.lastRecordTimestamp == fixtureTime(305))
+        #expect(withNoise.facts.lastRecordTimestamp == fixtureTime(308))
         #expect(withNoise.acknowledgementMarker == marker)
 
         let listing = SessionListing(sessions: [withNoise], thresholds: .default, now: now, acknowledged: ["s": marker])
