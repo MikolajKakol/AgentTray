@@ -37,7 +37,7 @@ enum TerminalFocuser {
             logger.notice("Ghostty surfaces: \(surfaceList, privacy: .public); titles: \(titles.joined(separator: " | "), privacy: .public)")
             if let surfaces, let surface = TerminalLocator.surface(for: process, titles: titles, in: surfaces) {
                 let active = await activateAndWait(app)
-                let focused = Ghostty.focus(surfaceId: surface.id)
+                let focused = await Ghostty.focus(surfaceId: surface.id)
                 logger.notice("Focus surface \(surface.id, privacy: .public): \(focused), Ghostty active before: \(active)")
                 if focused { return true }
             } else {
@@ -128,8 +128,35 @@ enum Ghostty {
         }
     }
 
-    static func focus(surfaceId: String) -> Bool {
+    /// A tab that is not selected has its own window ordered out, on no desktop. `focus` orders
+    /// that window front on the current desktop and the whole tab group moves along with it.
+    /// So when the tab is not selected, `activate window` first brings the window with its
+    /// selected tab to the front, which switches to the window's desktop; then `focus` selects
+    /// the tab there.
+    static func focus(surfaceId: String) async -> Bool {
         let quoted = surfaceId.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let reveal = """
+        tell application id "\(bundleIdentifier)"
+            repeat with w in windows
+                repeat with tb in tabs of w
+                    repeat with t in terminals of tb
+                        if ((id of t) as text) is "\(quoted)" then
+                            if selected of tb then return "selected"
+                            activate window w
+                            return "revealed"
+                        end if
+                    end repeat
+                end repeat
+            end repeat
+        end tell
+        return "missing"
+        """
+        let revealed = run(reveal)
+        logger.notice("Reveal window of \(surfaceId, privacy: .public): \(revealed ?? "error", privacy: .public)")
+        if revealed == "revealed" {
+            // Let the switch to the window's desktop finish before the hidden tab is ordered in.
+            try? await Task.sleep(for: .milliseconds(400))
+        }
         let source = """
         tell application id "\(bundleIdentifier)"
             repeat with t in terminals
