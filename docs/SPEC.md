@@ -147,7 +147,7 @@ Dla każdej sesji parser utrzymuje, przetwarzając rekordy po kolei:
 - `lastMessage`: tekst ostatniego bloku `text` z rekordu `assistant`;
 - `title`: `customTitle` > `aiTitle` > `firstPrompt` (jedna linia, najwyżej 60 znaków) > `name` z `sessions/*.json` > pierwsze 8 znaków `sessionId`.
 
-Rekordy `user` z `isMeta: true` nie zmieniają `turnEnded` ani `lastPrompt`.
+Rekordy `user` z `isMeta: true` albo `isCompactSummary: true` nie zmieniają `turnEnded` ani `lastPrompt`.
 
 ### Stany
 
@@ -200,7 +200,7 @@ Niezależnie od stanu:
 
 ### Przejrzane sesje
 
-Sesja z grupy "czeka na Ciebie" albo "niepewny" może zostać oznaczona jako przejrzana (przycisk w wierszu albo "Przejrzyj wszystkie" w stopce). Aplikacja zapamiętuje wtedy znacznik sesji: `timestamp` ostatniego rekordu, który posuwa rozmowę naprzód (gdy brak, `timestamp` ostatniego rekordu, a gdy i tego brak, `lastActivity`). Rozmowę posuwają: rekord `user` bez `isMeta` (prompt, wynik narzędzia, powiadomienie o zadaniu), rekord `assistant`, `system/turn_duration` i `queue-operation` z `<task-notification>`. Sesja pozostaje przejrzana, dopóki znacznik się nie zmieni. Nie cofają oznaczenia rekordy dopisywane po końcu tury: `ai-title`, `last-prompt`, podsumowanie po powrocie do terminala ("※ recap"), `system` o innych podtypach (np. `stop_hook_summary`), `attachment`, rekordy `user` z `isMeta: true` i nieznane typy. [Niezweryfikowane] Dokładny format rekordu "recap" nie jest znany; reguła nie zależy od niego, o ile nie jest to rekord `assistant` ani `user` bez `isMeta`. Przejrzana sesja:
+Sesja z grupy "czeka na Ciebie" albo "niepewny" może zostać oznaczona jako przejrzana (przycisk w wierszu albo "Przejrzyj wszystkie" w stopce). Aplikacja zapamiętuje wtedy znacznik sesji: `timestamp` ostatniego rekordu, który posuwa rozmowę naprzód (gdy brak, `timestamp` ostatniego rekordu, a gdy i tego brak, `lastActivity`). Rozmowę posuwają: rekord `user` bez `isMeta` i bez `isCompactSummary`, który jest promptem (`origin.kind == "human"`), powiadomieniem o zadaniu (`origin.kind == "task-notification"` albo `<task-notification>` w treści), wynikiem narzędzia albo przerwaniem; rekord `assistant`; `system/turn_duration`; `queue-operation` z `<task-notification>`. Sesja pozostaje przejrzana, dopóki znacznik się nie zmieni. Nie cofają oznaczenia rekordy dopisywane po końcu tury: `ai-title`, `last-prompt`, podsumowanie po powrocie do terminala ("※ recap", `system/away_summary`), kompakcja w bezczynności ("Compacted while idle": `system/compact_boundary` i rekord `user` z `isCompactSummary: true`), `system` o innych podtypach (np. `stop_hook_summary`), `attachment`, rekordy `user` z `isMeta: true` lub bez żadnej z powyższych ról i nieznane typy. [Niezweryfikowane] Formaty rekordów recapu i kompakcji w `13-idle-compaction.jsonl` są odtworzone, nie przechwycone z prawdziwej sesji; reguła nie zależy od nich, o ile nie są to rekordy `assistant` ani `user` z jedną z ról wyżej. Przejrzana sesja:
 
 - nie wlicza się do licznika i nie włącza ikony z obrysem;
 - trafia do osobnej grupy "Przejrzane", wyświetlanej przyciemniona;
@@ -283,7 +283,7 @@ Rdzeń modelu stanów to czysta funkcja: `reduce(state: SessionFacts, record: Tr
 
 ## Testy
 
-Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295 (01–09) i 2.1.306 (10–12). Oczekiwane wyniki:
+Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295 (01–09) i 2.1.306 (10–13; 13 odtworzony ręcznie). Oczekiwane wyniki:
 
 | Fixture | Oczekiwany stan | Dodatkowo |
 |---|---|---|
@@ -299,6 +299,7 @@ Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `f
 | `10-desktop-turn-ended.jsonl` | `yourTurn` | sesja desktopowa bez `turn_duration`, `entrypoint: remote_desktop`, Claude Code 2.1.306 |
 | `11-desktop-stop-hook-continuation.jsonl` | `monitoring(1)` | `yourTurn` po pierwszym `end_turn`, pracuje dalej po rekordzie `isMeta` z hooka Stop; `lastPrompt` = "Scal zmiany do main" |
 | `12-monitor.jsonl` | `yourTurn` | `monitoring(1)` po uruchomieniu `Monitor` i po jego zdarzeniu (`<event>` bez `<status>`); `yourTurn` po terminie `timeoutMs` i po `<status>completed</status>` |
+| `13-idle-compaction.jsonl` | `yourTurn` | po końcu tury recap (`away_summary`) i kompakcja w bezczynności (`compact_boundary`, `isCompactSummary`, `attachment`); znacznik przejrzenia pozostaje na `turn_duration`, `lastPrompt` = "Przygotuj agendę spotkania" |
 
 `sessions-3398.json` testuje dekodowanie rejestru sesji, a `subagent.meta.json` jest próbką formatu metadanych subagenta (nieużywaną przez aplikację).
 

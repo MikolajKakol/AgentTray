@@ -118,6 +118,18 @@ struct FixtureTests {
         #expect(ended.lastMessage == "Testy e2e przeszły.")
     }
 
+    // Fixture 13: after the turn Claude Code writes the away recap ("※ recap") and later
+    // compacts the idle session ("Compacted while idle"). None of it moves the conversation.
+    @Test func idleRecapAndCompactionKeepTheTurnEnded() throws {
+        let facts = try Fixtures.facts("13-idle-compaction.jsonl")
+        #expect(classify(facts: facts, settings: .default, now: fixtureTime(3600)) == .yourTurn)
+        #expect(facts.lastSignificantTimestamp == fixtureTime(4.5))
+        #expect(try #require(facts.lastRecordTimestamp) > fixtureTime(55 * 60))
+        #expect(facts.lastPrompt == "Przygotuj agendę spotkania")
+        #expect(facts.lastHumanPrompt == "Przygotuj agendę spotkania")
+        #expect(facts.lastMessage == "Agenda gotowa.")
+    }
+
     @Test func sessionRegistry() throws {
         let entry = try SessionRegistryEntry.decode(Data(contentsOf: Fixtures.url("sessions-3398.json")))
         #expect(entry.sessionId == "11111111-2222-3333-4444-555555555555")
@@ -129,7 +141,7 @@ struct FixtureTests {
 
     @Test func noFixtureLineIsInvalid() throws {
         let names = try FileManager.default.contentsOfDirectory(atPath: Fixtures.directory.path).filter { $0.hasSuffix(".jsonl") }
-        #expect(names.count == 12)
+        #expect(names.count == 13)
         for name in names {
             let reader = TranscriptReader(url: Fixtures.url(name))
             try reader.update()
