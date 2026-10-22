@@ -9,7 +9,7 @@ enum TerminalFocuser {
     private static let logger = Logger(subsystem: "local.agenttray", category: "terminal")
 
     /// False when no live process has the session open or its app could not be found.
-    static func focus(_ snapshot: SessionSnapshot, entries: [SessionRegistryEntry], processes: [HostProcess]) async -> Bool {
+    static func focus(_ snapshot: SessionSnapshot, entries: [SessionRegistryEntry], processes: [HostProcess]) -> Bool {
         guard var process = TerminalLocator.process(
             forSession: snapshot.sessionId, claudeDirectory: snapshot.directoryPath,
             entries: entries, processes: processes
@@ -36,9 +36,13 @@ enum TerminalFocuser {
             } ?? "error"
             logger.notice("Ghostty surfaces: \(surfaceList, privacy: .public); titles: \(titles.joined(separator: " | "), privacy: .public)")
             if let surfaces, let surface = TerminalLocator.surface(for: process, titles: titles, in: surfaces) {
-                let active = await activateAndWait(app)
-                let focused = await Ghostty.focus(surfaceId: surface.id)
-                logger.notice("Focus surface \(surface.id, privacy: .public): \(focused), Ghostty active before: \(active)")
+                // Ghostty's `focus` orders the window front and only then activates the app, which
+                // switches to the window's desktop. Ordered front by an already active Ghostty, the
+                // window is moved to the current desktop instead. So Ghostty is not activated here,
+                // only allowed to activate itself.
+                NSApp.yieldActivation(to: app)
+                let focused = Ghostty.focus(surfaceId: surface.id)
+                logger.notice("Focus surface \(surface.id, privacy: .public): \(focused)")
                 if focused { return true }
             } else {
                 logger.notice("No single Ghostty surface for pid \(process.pid); activating the app only")
@@ -47,21 +51,6 @@ enum TerminalFocuser {
         let activated = app.activate()
         logger.notice("Activate \(app.bundleIdentifier ?? "?", privacy: .public): \(activated)")
         return activated
-    }
-
-    /// Activates `app` and waits until it is active, at most `timeout`.
-    /// Ghostty's `focus` orders the window front and only then activates itself. Ordered front by
-    /// an inactive app, a window from another desktop can land on the current one. With Ghostty
-    /// already active, macOS switches to the window's desktop instead, as for the Window menu.
-    private static func activateAndWait(_ app: NSRunningApplication, timeout: Duration = .milliseconds(500)) async -> Bool {
-        NSApp.yieldActivation(to: app)
-        _ = app.activate()
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: timeout)
-        while !app.isActive, clock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return app.isActive
     }
 
     /// The first ancestor that is a regular app (the terminal emulator).
@@ -128,35 +117,11 @@ enum Ghostty {
         }
     }
 
-    /// A tab that is not selected has its own window ordered out, on no desktop. `focus` orders
-    /// that window front on the current desktop and the whole tab group moves along with it.
-    /// So when the tab is not selected, `activate window` first brings the window with its
-    /// selected tab to the front, which switches to the window's desktop; then `focus` selects
-    /// the tab there.
-    static func focus(surfaceId: String) async -> Bool {
+    /// No `activate` after `focus`: Ghostty activates itself after ordering the window front.
+    /// Handled before that, an `activate` makes Ghostty order the window front while active, and
+    /// the window moves to the current desktop.
+    static func focus(surfaceId: String) -> Bool {
         let quoted = surfaceId.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let reveal = """
-        tell application id "\(bundleIdentifier)"
-            repeat with w in windows
-                repeat with tb in tabs of w
-                    repeat with t in terminals of tb
-                        if ((id of t) as text) is "\(quoted)" then
-                            if selected of tb then return "selected"
-                            activate window w
-                            return "revealed"
-                        end if
-                    end repeat
-                end repeat
-            end repeat
-        end tell
-        return "missing"
-        """
-        let revealed = run(reveal)
-        logger.notice("Reveal window of \(surfaceId, privacy: .public): \(revealed ?? "error", privacy: .public)")
-        if revealed == "revealed" {
-            // Let the switch to the window's desktop finish before the hidden tab is ordered in.
-            try? await Task.sleep(for: .milliseconds(400))
-        }
         let source = """
         tell application id "\(bundleIdentifier)"
             repeat with t in terminals
