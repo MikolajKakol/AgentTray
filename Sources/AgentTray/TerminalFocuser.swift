@@ -9,7 +9,7 @@ enum TerminalFocuser {
     private static let logger = Logger(subsystem: "local.agenttray", category: "terminal")
 
     /// False when no live process has the session open or its app could not be found.
-    static func focus(_ snapshot: SessionSnapshot, entries: [SessionRegistryEntry], processes: [HostProcess]) -> Bool {
+    static func focus(_ snapshot: SessionSnapshot, entries: [SessionRegistryEntry], processes: [HostProcess]) async -> Bool {
         guard var process = TerminalLocator.process(
             forSession: snapshot.sessionId, claudeDirectory: snapshot.directoryPath,
             entries: entries, processes: processes
@@ -36,8 +36,9 @@ enum TerminalFocuser {
             } ?? "error"
             logger.notice("Ghostty surfaces: \(surfaceList, privacy: .public); titles: \(titles.joined(separator: " | "), privacy: .public)")
             if let surfaces, let surface = TerminalLocator.surface(for: process, titles: titles, in: surfaces) {
+                let active = await activateAndWait(app)
                 let focused = Ghostty.focus(surfaceId: surface.id)
-                logger.notice("Focus surface \(surface.id, privacy: .public): \(focused)")
+                logger.notice("Focus surface \(surface.id, privacy: .public): \(focused), Ghostty active before: \(active)")
                 if focused { return true }
             } else {
                 logger.notice("No single Ghostty surface for pid \(process.pid); activating the app only")
@@ -46,6 +47,21 @@ enum TerminalFocuser {
         let activated = app.activate()
         logger.notice("Activate \(app.bundleIdentifier ?? "?", privacy: .public): \(activated)")
         return activated
+    }
+
+    /// Activates `app` and waits until it is active, at most `timeout`.
+    /// Ghostty's `focus` orders the window front and only then activates itself. Ordered front by
+    /// an inactive app, a window from another desktop can land on the current one. With Ghostty
+    /// already active, macOS switches to the window's desktop instead, as for the Window menu.
+    private static func activateAndWait(_ app: NSRunningApplication, timeout: Duration = .milliseconds(500)) async -> Bool {
+        NSApp.yieldActivation(to: app)
+        _ = app.activate()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while !app.isActive, clock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return app.isActive
     }
 
     /// The first ancestor that is a regular app (the terminal emulator).
@@ -119,7 +135,6 @@ enum Ghostty {
             repeat with t in terminals
                 if ((id of t) as text) is "\(quoted)" then
                     focus t
-                    activate
                     return "ok"
                 end if
             end repeat

@@ -258,6 +258,8 @@ Okno: aplikacja idzie od znalezionego procesu w górę po rodzicach do pierwszej
 - gdy Ghostty podaje `tty` terminala (wersje nowsze niż 1.3.1), po równości z terminalem procesu;
 - inaczej po tytule i katalogu. Tytuł terminala ustawia Claude Code (np. `✳ Implement login`); znak aktywności na początku, wielkość liter i nadmiarowe spacje są pomijane, tytuł ucięty wielokropkiem albo krótszy o całe słowa (co najmniej 8 znaków) pasuje do początku. Tytuły sesji do porównania: `title`, `customTitle`, `aiTitle` i `name` z rejestru. Katalog to katalog roboczy znalezionego procesu (dla `ssh` katalog, z którego uruchomiono `speedwave`) porównany z `working directory` terminala. Wygrywa jedyny terminal pasujący tytułem i katalogiem; potem jedyny pasujący tytułem; gdy żaden tytuł nie pasuje, jedyny terminal w tym katalogu. W pozostałych przypadkach aplikacja aktywuje tylko Ghostty.
 
+Przed `focus` aplikacja oddaje aktywację Ghostty, aktywuje go i czeka (najwyżej 0,5 s), aż będzie aktywny. `focus` w Ghostty najpierw wyciąga okno na wierzch, a dopiero potem aktywuje aplikację; gdy Ghostty nie jest aktywny, macOS potrafi przenieść okno z innego biurka na bieżące. Przy aktywnym Ghostty system przełącza na biurko okna, jak przy wyborze okna z menu Okno. [Niezweryfikowane] Aktywacja może najpierw pokazać biurko z innym oknem Ghostty.
+
 Dla innych terminali aplikacja aktywuje samą aplikację. AppleScript wymaga zgody na Automatyzację (pytanie systemowe przy pierwszym użyciu, opis w `NSAppleEventsUsageDescription`).
 
 ### Ustawienia

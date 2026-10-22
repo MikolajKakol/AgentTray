@@ -67,7 +67,7 @@ final class SessionStore {
         Task {
             let entries = await monitor.registryEntries(directoryPath: snapshot.directoryPath)
             let processes = await Task.detached(priority: .userInitiated) { ProcessTable.read() }.value
-            if TerminalFocuser.focus(snapshot, entries: entries, processes: processes) {
+            if await TerminalFocuser.focus(snapshot, entries: entries, processes: processes) {
                 if row.canAcknowledge { acknowledge(row) }
             } else {
                 sessionsWithTerminal = await monitor.sessionsWithTerminal(processes: processes)
