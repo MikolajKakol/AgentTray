@@ -197,6 +197,7 @@ Niezależnie od stanu:
 - Są takie sesje: ikona z liczbą (np. `2`), wypełniona.
 - Jest co najmniej jedna sesja w stanie `maybeAwaitingPermission`: ikona w wersji z obrysem, niezależnie od licznika. Sesje niepewne nie wliczają się do licznika.
 - Do licznika nie wliczają się sesje przyciemnione ani przejrzane.
+- Sesja z grupy "czeka na Ciebie" wlicza się do licznika dopiero, gdy czeka co najmniej próg licznika (domyślnie 5 s). Początek czekania to znacznik sesji z "Przejrzane sesje" (`timestamp` ostatniego rekordu, który posuwa rozmowę naprzód). Dzięki temu koniec tury albo `/clear` na oczach użytkownika nie zapala ikony. W popoverze sesja jest w grupie "czeka na Ciebie" od razu.
 
 ### Przejrzane sesje
 
@@ -268,6 +269,7 @@ Okno `Settings` z polami:
 - przyciemniaj po (h), domyślnie 10;
 - ukrywaj po (h), domyślnie 40; walidacja: większe niż próg przyciemniania;
 - próg niepewnego stanu (s), domyślnie 10;
+- próg licznika (s), domyślnie 5; 0 wyłącza opóźnienie;
 - przełącznik "Uruchamiaj przy logowaniu" (`SMAppService.mainApp`).
 
 Ustawienia w `UserDefaults`.

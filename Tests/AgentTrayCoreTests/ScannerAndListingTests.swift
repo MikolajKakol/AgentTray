@@ -263,6 +263,24 @@ struct SessionListingTests {
         #expect(!listing.hasUncertain)
     }
 
+    @Test func freshWaitIsListedButNotCountedYet() {
+        // The turn ended 2 s before `now`; a title appended later does not restart the wait.
+        let start = now.timeIntervalSince(fixtureTime()) - 4
+        let yourTurn = facts([Line.prompt("a", at: start), Line.text("b", at: start + 1),
+                              Line.turnDuration(at: start + 2), Line.aiTitle("Tytuł")])
+        let session = snapshot("s", yourTurn, idle: 0)
+
+        let early = SessionListing(sessions: [session], thresholds: .default, now: now)
+        #expect(early.rows.map(\.group) == [.waitingForYou])
+        #expect(early.waitingCount == 0)
+
+        let later = SessionListing(sessions: [session], thresholds: .default, now: now.addingTimeInterval(3))
+        #expect(later.waitingCount == 1)
+
+        let noDelay = Thresholds(countWaitingAfter: 0)
+        #expect(SessionListing(sessions: [session], thresholds: noDelay, now: now).waitingCount == 1)
+    }
+
     @Test func ageBoundaries() {
         let last = fixtureTime()
         #expect(SessionAge(lastActivity: last, thresholds: .default, now: last.addingTimeInterval(10 * 3600)) == .fresh)

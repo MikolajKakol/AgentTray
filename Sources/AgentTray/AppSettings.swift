@@ -11,6 +11,7 @@ final class AppSettings {
         static let dimAfterHours = "dimAfterHours"
         static let hideAfterHours = "hideAfterHours"
         static let uncertainAfterSeconds = "uncertainAfterSeconds"
+        static let countWaitingAfterSeconds = "countWaitingAfterSeconds"
     }
 
     static let defaultPatterns = ["~/.claude"]
@@ -34,6 +35,10 @@ final class AppSettings {
         didSet { defaults.set(uncertainAfterSeconds, forKey: Key.uncertainAfterSeconds) }
     }
 
+    var countWaitingAfterSeconds: Int {
+        didSet { defaults.set(countWaitingAfterSeconds, forKey: Key.countWaitingAfterSeconds) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         patterns = defaults.stringArray(forKey: Key.patterns) ?? Self.defaultPatterns
@@ -42,13 +47,15 @@ final class AppSettings {
         dimAfterHours = max(1, dim)
         hideAfterHours = max(max(1, dim) + 1, hide)
         uncertainAfterSeconds = max(1, defaults.object(forKey: Key.uncertainAfterSeconds) as? Int ?? 10)
+        countWaitingAfterSeconds = max(0, defaults.object(forKey: Key.countWaitingAfterSeconds) as? Int ?? 5)
     }
 
     var thresholds: Thresholds {
         Thresholds(
             dimAfter: TimeInterval(dimAfterHours) * 3600,
             hideAfter: TimeInterval(hideAfterHours) * 3600,
-            uncertainAfter: TimeInterval(uncertainAfterSeconds)
+            uncertainAfter: TimeInterval(uncertainAfterSeconds),
+            countWaitingAfter: TimeInterval(countWaitingAfterSeconds)
         )
     }
 }

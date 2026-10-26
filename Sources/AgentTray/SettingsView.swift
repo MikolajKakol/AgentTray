@@ -45,6 +45,10 @@ struct SettingsView: View {
                 Stepper(value: $settings.uncertainAfterSeconds, in: 1...600) {
                     Text("Próg niepewnego stanu: \(settings.uncertainAfterSeconds) s")
                 }
+                Stepper(value: $settings.countWaitingAfterSeconds, in: 0...600) {
+                    Text("Licz czekające po: \(settings.countWaitingAfterSeconds) s")
+                }
+                .help("Sesja trafia do licznika w pasku menu dopiero po tylu sekundach czekania")
             }
 
             Section {
