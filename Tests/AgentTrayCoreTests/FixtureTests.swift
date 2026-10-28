@@ -131,6 +131,33 @@ struct FixtureTests {
         #expect(facts.lastMessage == "Agenda gotowa.")
     }
 
+    // Fixture 14 (reconstructed): a desktop session without `turn_duration` starts a background
+    // agent, ends the turn, and on its notification starts the next one. Only the last answer,
+    // with no agent left running, is the user's turn.
+    @Test func desktopBackgroundAgentsKeepTheSessionWorking() throws {
+        let lines = try String(contentsOf: Fixtures.url("14-desktop-subagents-respawn.jsonl"), encoding: .utf8)
+            .split(separator: "\n").map { String($0) + "\n" }
+        let endTurns = lines.indices.filter { lines[$0].contains("\"end_turn\"") }
+        #expect(endTurns.count == 3)
+
+        let first = try facts(from: Array(lines[...endTurns[0]]))
+        #expect(first.turnEnded)
+        #expect(first.pendingBackgroundAgents == 0)
+        #expect(classify(facts: first, settings: .default, now: fixtureTime(60)) == .waitingForSubagents(1))
+
+        let notified = try #require(lines.indices.first { $0 > endTurns[0] && lines[$0].contains("\"task-notification\"") })
+        #expect(classify(facts: try facts(from: Array(lines[...notified])), settings: .default, now: fixtureTime(181)) == .thinking)
+
+        let respawned = try facts(from: Array(lines[...endTurns[1]]))
+        #expect(respawned.backgroundTasks == ["a0000000000000012": .agent])
+        #expect(classify(facts: respawned, settings: .default, now: fixtureTime(240)) == .waitingForSubagents(1))
+
+        let done = try Fixtures.facts("14-desktop-subagents-respawn.jsonl")
+        #expect(done.backgroundTasks.isEmpty)
+        #expect(classify(facts: done, settings: .default, now: fixtureTime(400)) == .yourTurn)
+        #expect(done.lastMessage == "Przegląd gotowy.")
+    }
+
     @Test func sessionRegistry() throws {
         let entry = try SessionRegistryEntry.decode(Data(contentsOf: Fixtures.url("sessions-3398.json")))
         #expect(entry.sessionId == "11111111-2222-3333-4444-555555555555")
@@ -142,7 +169,7 @@ struct FixtureTests {
 
     @Test func noFixtureLineIsInvalid() throws {
         let names = try FileManager.default.contentsOfDirectory(atPath: Fixtures.directory.path).filter { $0.hasSuffix(".jsonl") }
-        #expect(names.count == 13)
+        #expect(names.count == 14)
         for name in names {
             let reader = TranscriptReader(url: Fixtures.url(name))
             try reader.update()

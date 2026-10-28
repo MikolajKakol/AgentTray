@@ -154,6 +154,29 @@ struct ReducerTests {
         #expect(!delivered.turnEnded)
     }
 
+    // The CLI writes `end_turn` before `turn_duration`; after a finished agent dropped the
+    // pending count to 0, a newly started one must not flash "your turn" in between.
+    @Test func agentStartedAfterNotificationCountsBeforeTurnDuration() throws {
+        let note = Line.notification(taskId: "a1", summary: "Agent \"x\" completed")
+        let lines = [
+            Line.prompt("Hej"),
+            Line.toolUse("g1", "Agent", at: 1),
+            Line.toolResult("g1", toolUseResult: ["isAsync": true, "status": "async_launched", "agentId": "a1"]),
+            Line.text("Czekam", at: 2),
+            Line.turnDuration(pending: 1),
+            Line.enqueue(note),
+            Line.taskNotificationPrompt(note),
+            Line.toolUse("g2", "Agent", at: 12),
+            Line.toolResult("g2", at: 13, toolUseResult: ["isAsync": true, "status": "async_launched", "agentId": "a2"]),
+            Line.text("Uruchomiłem kolejnego", at: 14),
+        ]
+        let ended = try facts(from: lines)
+        #expect(ended.turnEnded)
+        #expect(ended.pendingBackgroundAgents == 0)
+        #expect(classify(facts: ended, settings: .default, now: fixtureTime(20)) == .waitingForSubagents(1))
+        #expect(try status(lines + [Line.turnDuration(at: 15, pending: 1)], now: fixtureTime(20)) == .waitingForSubagents(1))
+    }
+
     @Test func lastBackgroundAgentFinishingGivesYourTurn() throws {
         let lines = [
             Line.prompt("Hej"),
