@@ -207,7 +207,7 @@ Sesja z grupy "czeka na Ciebie" albo "niepewny" może zostać oznaczona jako prz
 - trafia do osobnej grupy "Przejrzane", wyświetlanej przyciemniona;
 - ma przycisk "Przywróć do licznika".
 
-Sesje pracujące nie są oznaczane. Oznaczenia sesji, których nie ma na liście, są usuwane dopiero, gdy ich znacznik jest starszy niż próg ukrycia. Skan może chwilowo nie widzieć sesji (np. tuż po uruchomieniu, zanim katalog jest czytelny, albo gdy wzorzec przez chwilę nic nie dopasowuje); usunięcie oznaczenia od razu przywracałoby ją do licznika.
+Znacznik jest zapisywany w `UserDefaults` jako sekundy od daty odniesienia `Date` (klucz `acknowledgedSessionsV2`), więc po restarcie wraca dokładnie ten sam. Porównanie toleruje 0,5 ms różnicy (znaczniki w transkrypcie mają rozdzielczość 1 ms), żeby działały też znaczniki zapisane przez starsze wersje jako sekundy od 1970. Sesje pracujące nie są oznaczane. Oznaczenia sesji, których nie ma na liście, są usuwane dopiero, gdy ich znacznik jest starszy niż próg ukrycia. Skan może chwilowo nie widzieć sesji (np. tuż po uruchomieniu, zanim katalog jest czytelny, albo gdy wzorzec przez chwilę nic nie dopasowuje); usunięcie oznaczenia od razu przywracałoby ją do licznika.
 
 ### Popover
 
