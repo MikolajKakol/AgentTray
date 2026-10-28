@@ -94,11 +94,18 @@ public struct Thresholds: Sendable, Equatable {
     public var hideAfter: TimeInterval
     /// A tool call running this long outside bypass mode may be waiting for permission.
     public var uncertainAfter: TimeInterval
+    /// A session joins the menu bar count only after waiting this long, so a turn
+    /// ended (or a `/clear`) right in front of the user does not light up the icon.
+    public var countWaitingAfter: TimeInterval
 
-    public init(dimAfter: TimeInterval = 10 * 3600, hideAfter: TimeInterval = 40 * 3600, uncertainAfter: TimeInterval = 10) {
+    public init(
+        dimAfter: TimeInterval = 10 * 3600, hideAfter: TimeInterval = 40 * 3600,
+        uncertainAfter: TimeInterval = 10, countWaitingAfter: TimeInterval = 5
+    ) {
         self.dimAfter = dimAfter
         self.hideAfter = hideAfter
         self.uncertainAfter = uncertainAfter
+        self.countWaitingAfter = countWaitingAfter
     }
 
     public static let `default` = Thresholds()

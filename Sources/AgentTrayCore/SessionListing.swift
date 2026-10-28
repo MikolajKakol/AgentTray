@@ -44,7 +44,8 @@ extension SessionSnapshot {
 public struct SessionListing: Sendable, Equatable {
     /// Visible sessions in display order.
     public var rows: [SessionRow]
-    /// Sessions waiting for the user, excluding dimmed ones.
+    /// Sessions waiting for the user, excluding dimmed ones and those waiting
+    /// shorter than `Thresholds.countWaitingAfter`.
     public var waitingCount: Int
     /// At least one non-dimmed session may be waiting for a permission prompt.
     public var hasUncertain: Bool
@@ -74,7 +75,11 @@ public struct SessionListing: Sendable, Equatable {
             }
             return lhs.id < rhs.id
         }
-        waitingCount = rows.filter { $0.group == .waitingForYou }.count
+        // The marker is when the conversation last moved: for a waiting session, when the wait began.
+        waitingCount = rows.filter { row in
+            row.group == .waitingForYou
+                && now.timeIntervalSince(row.snapshot.acknowledgementMarker) >= thresholds.countWaitingAfter
+        }.count
         hasUncertain = rows.contains { $0.group == .uncertain }
     }
 
