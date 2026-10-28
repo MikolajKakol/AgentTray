@@ -104,6 +104,25 @@ struct TranscriptReaderTests {
         #expect(reader.facts.lastPrompt == "Nowy prompt")
     }
 
+    @Test func seenMarkerIsTheSameAfterARestart() throws {
+        let temp = try TemporaryDirectory()
+        // Timestamped bookkeeping after the turn fills more than the first window.
+        let bookkeeping = (0..<50).map {
+            Line.json(["type": "attachment", "timestamp": Line.ts(300 + Double($0)), "pad": String(repeating: "x", count: 100)])
+        }.joined()
+        let contents = Line.aiTitle("Tytuł") + Line.lastPrompt("a") + Line.prompt("a") + Line.text("b")
+            + Line.turnDuration(at: 3) + bookkeeping
+        let file = try temp.write("s.jsonl", contents)
+
+        let whole = TranscriptReader(url: file)
+        try whole.update()
+        let windowed = TranscriptReader(url: file, windowSize: 1024)
+        try windowed.update()
+        #expect(whole.facts.lastSignificantTimestamp == fixtureTime(3))
+        #expect(windowed.facts.lastSignificantTimestamp == fixtureTime(3))
+        #expect(windowed.facts.lastRecordTimestamp == fixtureTime(349))
+    }
+
     @Test func largeTranscriptReadsOnlyTheWindow() throws {
         let temp = try TemporaryDirectory()
         let filler = Line.json(["type": "progress", "pad": String(repeating: "y", count: 1000)])

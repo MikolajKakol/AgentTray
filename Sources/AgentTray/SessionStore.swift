@@ -127,11 +127,11 @@ final class SessionStore {
         guard update.generation > appliedGeneration else { return }
         appliedGeneration = update.generation
         sessions = update.sessions
-        // Forget acknowledgements of sessions that are gone.
-        let ids = Set(update.sessions.map(\.id))
-        if acknowledged.keys.contains(where: { !ids.contains($0) }) {
-            acknowledged = acknowledged.filter { ids.contains($0.key) }
-        }
+        // Forget acknowledgements of sessions that are gone for good.
+        let retained = retainedAcknowledgements(
+            acknowledged, sessions: update.sessions, thresholds: settings.thresholds, now: Date()
+        )
+        if retained.count != acknowledged.count { acknowledged = retained }
         trackedDirectories = update.directories
         matchCounts = update.matchCounts
         now = Date()

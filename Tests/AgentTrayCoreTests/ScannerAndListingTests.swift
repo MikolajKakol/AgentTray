@@ -242,6 +242,23 @@ struct SessionListingTests {
         #expect(notified.acknowledgementMarker == fixtureTime(400))
     }
 
+    @Test func acknowledgementsOfBrieflyMissingSessionsAreKept() {
+        let yourTurn = facts([Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3)])
+        let present = snapshot("present", yourTurn, idle: 1)
+        let acknowledged = [
+            "present": fixtureTime(3),
+            // Missing from this scan, e.g. a directory not readable yet right after launch.
+            "missing-recent": now.addingTimeInterval(-3600),
+            "missing-old": now.addingTimeInterval(-Thresholds.default.hideAfter - 60),
+        ]
+        let retained = retainedAcknowledgements(acknowledged, sessions: [present], thresholds: .default, now: now)
+        #expect(Set(retained.keys) == ["present", "missing-recent"])
+
+        // An empty scan keeps every recent acknowledgement.
+        let afterEmptyScan = retainedAcknowledgements(acknowledged, sessions: [], thresholds: .default, now: now)
+        #expect(Set(afterEmptyScan.keys) == ["missing-recent"])
+    }
+
     @Test func workingSessionsIgnoreAcknowledgement() {
         let thinking = facts([Line.prompt("a")])
         let s = snapshot("s", thinking, idle: 0.1)
