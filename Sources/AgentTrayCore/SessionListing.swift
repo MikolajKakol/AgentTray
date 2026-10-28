@@ -53,6 +53,18 @@ public func retainedAcknowledgements(
     }
 }
 
+/// Acknowledgements as stored in `UserDefaults`. Seconds since the reference date are what
+/// `Date` holds, so a marker reads back exactly; converting through 1970 does not.
+public enum AcknowledgementStorage {
+    public static func encode(_ acknowledged: [String: Date]) -> [String: Double] {
+        acknowledged.mapValues(\.timeIntervalSinceReferenceDate)
+    }
+
+    public static func decode(_ stored: [String: Double]) -> [String: Date] {
+        stored.mapValues(Date.init(timeIntervalSinceReferenceDate:))
+    }
+}
+
 /// Sessions as the popover and the menu bar icon show them at a given moment.
 public struct SessionListing: Sendable, Equatable {
     /// Visible sessions in display order.
@@ -71,7 +83,8 @@ public struct SessionListing: Sendable, Equatable {
             let status = classify(facts: snapshot.facts, settings: thresholds, now: now)
             var group = age == .dimmed ? .dimmed : status.group
             if group == .waitingForYou || group == .uncertain,
-               let marker = acknowledged[snapshot.id], snapshot.acknowledgementMarker <= marker {
+               let marker = acknowledged[snapshot.id],
+               snapshot.acknowledgementMarker.timeIntervalSince(marker) <= Self.markerTolerance {
                 group = .acknowledged
             }
             return SessionRow(snapshot: snapshot, status: status, group: group)
@@ -95,6 +108,11 @@ public struct SessionListing: Sendable, Equatable {
         }.count
         hasUncertain = rows.contains { $0.group == .uncertain }
     }
+
+    /// Transcript timestamps have millisecond precision, so two different markers are at
+    /// least 1 ms apart. A stored marker can come back from `UserDefaults` a fraction of a
+    /// nanosecond off (older versions stored seconds since 1970); that must still match.
+    static let markerTolerance: TimeInterval = 0.0005
 
     /// Questions come before plain "your turn" within the waiting group.
     private static func rankWithinGroup(_ row: SessionRow) -> Int {

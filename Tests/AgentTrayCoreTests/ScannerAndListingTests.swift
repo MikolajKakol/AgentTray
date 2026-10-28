@@ -259,6 +259,28 @@ struct SessionListingTests {
         #expect(Set(afterEmptyScan.keys) == ["missing-recent"])
     }
 
+    @Test func storedMarkersMatchAfterARestart() {
+        // Millisecond timestamps as they appear in transcripts.
+        let markers = (0..<2000).map { fixtureTime(Double($0) * 1.237 + 0.001) }
+        let sessions = markers.enumerated().map { index, marker in
+            let lines = [Line.prompt("a"), Line.text("b"), Line.turnDuration(at: marker.timeIntervalSince(fixtureTime()))]
+            return snapshot("s\(index)", facts(lines), idle: 1)
+        }
+        let acknowledged = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.acknowledgementMarker) })
+
+        let decoded = AcknowledgementStorage.decode(AcknowledgementStorage.encode(acknowledged))
+        #expect(decoded == acknowledged, "the stored form reads back exactly")
+
+        // Markers stored by earlier versions as seconds since 1970 can come back a fraction
+        // of a nanosecond lower; they must still count as seen.
+        let legacy = acknowledged.mapValues { Date(timeIntervalSince1970: $0.timeIntervalSince1970) }
+        let lower = acknowledged.mapValues { $0.addingTimeInterval(-0.000_000_1) }
+        for stored in [legacy, lower] {
+            let listing = SessionListing(sessions: sessions, thresholds: .default, now: now, acknowledged: stored)
+            #expect(listing.rows.allSatisfy(\.isAcknowledged))
+        }
+    }
+
     @Test func workingSessionsIgnoreAcknowledgement() {
         let thinking = facts([Line.prompt("a")])
         let s = snapshot("s", thinking, idle: 0.1)

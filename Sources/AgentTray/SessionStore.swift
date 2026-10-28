@@ -1,6 +1,7 @@
 import AgentTrayCore
 import Foundation
 import Observation
+import os
 
 /// Main-actor state for the UI. File work happens in `SessionMonitor`.
 @MainActor
@@ -16,26 +17,35 @@ final class SessionStore {
     private(set) var now = Date()
     /// Sessions marked as seen: session id to its `acknowledgementMarker` at that moment.
     /// Kept in the app's own `UserDefaults`, never in the tracked `.claude` directories.
-    private(set) var acknowledged: [String: Date] = [:] {
-        didSet {
-            defaults.set(acknowledged.mapValues(\.timeIntervalSince1970), forKey: Self.acknowledgedKey)
-        }
-    }
+    /// Changed only through `setAcknowledged`, which also saves it.
+    private(set) var acknowledged: [String: Date] = [:]
 
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let monitor = SessionMonitor()
     @ObservationIgnored private var watcher: FileWatcher?
     @ObservationIgnored private var appliedGeneration = 0
     @ObservationIgnored private var timers: [Task<Void, Never>] = []
+    /// Set after the first scan has been compared with the stored acknowledgements.
+    @ObservationIgnored private var reportedStoredMarkers = false
 
     @ObservationIgnored private let defaults: UserDefaults
-    private static let acknowledgedKey = "acknowledgedSessions"
+    private static let acknowledgedKey = "acknowledgedSessionsV2"
+    /// Earlier versions stored seconds since 1970 under this key.
+    private static let legacyAcknowledgedKey = "acknowledgedSessions"
+    private static let log = Logger(subsystem: "local.agenttray", category: "acknowledgements")
 
     init(settings: AppSettings, defaults: UserDefaults = .standard) {
         self.settings = settings
         self.defaults = defaults
-        let stored = defaults.dictionary(forKey: Self.acknowledgedKey) as? [String: Double] ?? [:]
-        acknowledged = stored.mapValues { Date(timeIntervalSince1970: $0) }
+        if let stored = defaults.dictionary(forKey: Self.acknowledgedKey) as? [String: Double] {
+            acknowledged = AcknowledgementStorage.decode(stored)
+            Self.log.notice("Loaded \(stored.count) acknowledgements")
+        } else if let legacy = defaults.dictionary(forKey: Self.legacyAcknowledgedKey) as? [String: Double] {
+            setAcknowledged(legacy.mapValues { Date(timeIntervalSince1970: $0) }, reason: "migrated")
+            defaults.removeObject(forKey: Self.legacyAcknowledgedKey)
+        } else {
+            Self.log.notice("No stored acknowledgements")
+        }
     }
 
     var listing: SessionListing {
@@ -44,7 +54,9 @@ final class SessionStore {
 
     /// Marks the session as seen until it records something new.
     func acknowledge(_ row: SessionRow) {
-        acknowledged[row.id] = row.snapshot.acknowledgementMarker
+        var updated = acknowledged
+        updated[row.id] = row.snapshot.acknowledgementMarker
+        setAcknowledged(updated, reason: "acknowledged \(row.id)")
     }
 
     func acknowledgeAll() {
@@ -52,11 +64,19 @@ final class SessionStore {
         for row in listing.rows where row.canAcknowledge {
             updated[row.id] = row.snapshot.acknowledgementMarker
         }
-        acknowledged = updated
+        setAcknowledged(updated, reason: "acknowledged all")
     }
 
     func unacknowledge(_ row: SessionRow) {
-        acknowledged[row.id] = nil
+        var updated = acknowledged
+        updated[row.id] = nil
+        setAcknowledged(updated, reason: "restored \(row.id)")
+    }
+
+    private func setAcknowledged(_ updated: [String: Date], reason: String) {
+        acknowledged = updated
+        defaults.set(AcknowledgementStorage.encode(updated), forKey: Self.acknowledgedKey)
+        Self.log.notice("Saved \(updated.count) acknowledgements (\(reason, privacy: .public))")
     }
 
     /// Brings the window the session is open in to the front and, when the session waits for
@@ -131,12 +151,32 @@ final class SessionStore {
         let retained = retainedAcknowledgements(
             acknowledged, sessions: update.sessions, thresholds: settings.thresholds, now: Date()
         )
-        if retained.count != acknowledged.count { acknowledged = retained }
+        if retained.count != acknowledged.count {
+            setAcknowledged(retained, reason: "dropped \(acknowledged.count - retained.count) of missing sessions")
+        }
+        if !reportedStoredMarkers && !update.sessions.isEmpty {
+            reportedStoredMarkers = true
+            reportStoredMarkers(update.sessions)
+        }
         trackedDirectories = update.directories
         matchCounts = update.matchCounts
         now = Date()
         watcher?.watch(update.watchPaths)
         // `/clear` and `/resume` rewrite `sessions/*.json`: the button moves with the conversation.
         Task { await refreshTerminals() }
+    }
+
+    /// Logs acknowledged sessions whose marker moved since it was stored, for diagnosing
+    /// sessions that come back as waiting after a restart.
+    private func reportStoredMarkers(_ sessions: [SessionSnapshot]) {
+        let present = sessions.filter { acknowledged[$0.id] != nil }
+        Self.log.notice("First scan: \(sessions.count) sessions, \(present.count) of them acknowledged")
+        for snapshot in present {
+            guard let stored = acknowledged[snapshot.id] else { continue }
+            let difference = snapshot.acknowledgementMarker.timeIntervalSince(stored)
+            if difference > 0 {
+                Self.log.notice("Marker moved by \(difference) s since acknowledged: \(snapshot.id, privacy: .public)")
+            }
+        }
     }
 }
