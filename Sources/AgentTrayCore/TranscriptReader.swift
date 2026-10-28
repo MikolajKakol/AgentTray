@@ -59,9 +59,9 @@ public final class TranscriptReader {
         try backfill(handle, before: start, head: head)
     }
 
-    /// Walks back in `windowSize` steps until the prompt and title are known
-    /// or the start of the file is reached. Only metadata is taken from these older
-    /// chunks; tool and task state from before the window is not reconstructed.
+    /// Walks back in `windowSize` steps until the prompt, the title and the seen marker
+    /// (`lastSignificantTimestamp`) are known or the start of the file is reached. Only metadata
+    /// is taken from these older chunks; tool and task state from before the window is not reconstructed.
     private func backfill(_ handle: FileHandle, before windowStart: UInt64, head: Data) throws {
         var chunkEnd = windowStart
         var carried = head
@@ -85,12 +85,15 @@ public final class TranscriptReader {
             if facts.cwd == nil { facts.cwd = older.cwd }
             if facts.lastMessage == nil { facts.lastMessage = older.lastMessage }
             if facts.permissionMode == nil { facts.permissionMode = older.permissionMode }
+            // Without it the marker falls back to the last bookkeeping record, so a session
+            // marked as seen before a restart would come back as waiting.
+            if facts.lastSignificantTimestamp == nil { facts.lastSignificantTimestamp = older.lastSignificantTimestamp }
             chunkEnd = chunkStart
         }
     }
 
     private var needsBackfill: Bool {
-        facts.lastPromptRecord == nil || facts.transcriptTitle == nil
+        facts.lastPromptRecord == nil || facts.transcriptTitle == nil || facts.lastSignificantTimestamp == nil
     }
 
     private func consume(_ data: Data) {

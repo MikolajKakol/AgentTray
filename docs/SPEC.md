@@ -181,7 +181,7 @@ Niezależnie od stanu:
 ## Odczyt plików
 
 - Obserwacja: FSEvents na każdym śledzonym katalogu `.claude` (rekursywnie dla `sessions/` i `projects/`), z debounce 300 ms. Zdarzenia wyzwalają odczyt tylko zmienionych plików.
-- Pierwszy odczyt transkryptu: ostatnie 256 KB. Pierwsza (prawdopodobnie ucięta) linia okna jest odrzucana. Jeśli w oknie nie ma `last-prompt` ani tytułu, parser cofa się o kolejne 256 KB, aż je znajdzie albo dojdzie do początku pliku. `openToolUses` i `backgroundTasks` z uciętego okna mogą być niepełne; to akceptowalne, bo zadania starsze niż okno i tak zwykle się zakończyły.
+- Pierwszy odczyt transkryptu: ostatnie 256 KB. Pierwsza (prawdopodobnie ucięta) linia okna jest odrzucana. Jeśli w oknie brakuje `last-prompt`, tytułu albo rekordu posuwającego rozmowę naprzód (znacznik przejrzenia, patrz "Przejrzane sesje"), parser cofa się o kolejne 256 KB, aż je znajdzie albo dojdzie do początku pliku. Dzięki temu znacznik po restarcie aplikacji jest taki sam jak przed nim. `openToolUses` i `backgroundTasks` z uciętego okna mogą być niepełne; to akceptowalne, bo zadania starsze niż okno i tak zwykle się zakończyły.
 - Kolejne odczyty: od zapamiętanego offsetu, tylko nowe bajty. Niepełna ostatnia linia (bez `\n`) czeka w buforze na kolejny odczyt.
 - Plik krótszy niż zapamiętany offset albo z innym inode: pełny ponowny odczyt od okna 256 KB.
 - Linia, której nie da się sparsować jako JSON: pomijana i logowana (`os.Logger`, kategoria `parser`), bez przerywania odczytu.
@@ -207,7 +207,7 @@ Sesja z grupy "czeka na Ciebie" albo "niepewny" może zostać oznaczona jako prz
 - trafia do osobnej grupy "Przejrzane", wyświetlanej przyciemniona;
 - ma przycisk "Przywróć do licznika".
 
-Sesje pracujące nie są oznaczane. Oznaczenia sesji, które zniknęły z listy, są usuwane.
+Sesje pracujące nie są oznaczane. Oznaczenia sesji, których nie ma na liście, są usuwane dopiero, gdy ich znacznik jest starszy niż próg ukrycia. Skan może chwilowo nie widzieć sesji (np. tuż po uruchomieniu, zanim katalog jest czytelny, albo gdy wzorzec przez chwilę nic nie dopasowuje); usunięcie oznaczenia od razu przywracałoby ją do licznika.
 
 ### Popover
 

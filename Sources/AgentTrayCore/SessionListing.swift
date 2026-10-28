@@ -40,6 +40,19 @@ extension SessionSnapshot {
     }
 }
 
+/// Which acknowledgements to keep after a scan. Those of sessions in the scan stay; those of
+/// missing sessions stay while they are younger than `hideAfter`. A scan can miss a session
+/// for a moment, e.g. right after launch, before a directory is readable, or while a pattern
+/// matches nothing; dropping its acknowledgement then brings it back as waiting.
+public func retainedAcknowledgements(
+    _ acknowledged: [String: Date], sessions: [SessionSnapshot], thresholds: Thresholds, now: Date
+) -> [String: Date] {
+    let ids = Set(sessions.map(\.id))
+    return acknowledged.filter { id, marker in
+        ids.contains(id) || now.timeIntervalSince(marker) <= thresholds.hideAfter
+    }
+}
+
 /// Sessions as the popover and the menu bar icon show them at a given moment.
 public struct SessionListing: Sendable, Equatable {
     /// Visible sessions in display order.
