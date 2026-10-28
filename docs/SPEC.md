@@ -156,7 +156,7 @@ Stan wyznacza się regułami w tej kolejności; wygrywa pierwsza pasująca.
 | Stan | Reguła | Grupa |
 |---|---|---|
 | `askingQuestion` | w `openToolUses` jest `AskUserQuestion` albo `ExitPlanMode` | czeka na Ciebie |
-| `waitingForSubagents(n)` | w `openToolUses` jest `Agent` lub `Task` (n = ich liczba), albo `turnEnded` i `pendingBackgroundAgents > 0` (n = ta liczba) | pracuje |
+| `waitingForSubagents(n)` | w `openToolUses` jest `Agent` lub `Task` (n = ich liczba), albo `turnEnded` i n > 0, gdzie n to większa z liczb: `pendingBackgroundAgents` i liczba zadań rodzaju `agent` w `backgroundTasks` | pracuje |
 | `runningTool(name, summary)` | w `openToolUses` jest inne narzędzie i (`permissionMode == "bypassPermissions"` albo wywołanie trwa krócej niż próg niepewności) | pracuje |
 | `maybeAwaitingPermission(name, summary)` | w `openToolUses` jest inne narzędzie, tryb inny niż `bypassPermissions` i wywołanie trwa co najmniej próg niepewności (domyślnie 10 s) | niepewny |
 | `monitoring(n)` | `turnEnded` i w `backgroundTasks` jest n > 0 zadań rodzaju `task` przed terminem | pracuje |
@@ -167,6 +167,7 @@ Uwagi:
 
 - Kilka otwartych narzędzi naraz (wywołania równoległe): `askingQuestion` ma pierwszeństwo, potem subagenci, potem pozostałe; `summary` dotyczy najstarszego otwartego wywołania.
 - `summary` narzędzia: dla `Bash` pole `description`, a gdy brak, pierwsze 60 znaków `command`; dla `Read`, `Edit`, `Write` nazwa pliku z `file_path`; dla innych sama nazwa narzędzia.
+- Sesje desktopowe nie zapisują `turn_duration`, a w CLI `turn_duration` przychodzi po `end_turn`, który już kończy turę. Bez liczenia `backgroundTasks` sesja z subagentem w tle (także uruchomionym ponownie po powiadomieniu o poprzednim) pokazywałaby wtedy "czeka na Ciebie".
 - `status: "busy"` z `sessions/*.json` przy stanie `yourTurn` nie zmienia stanu, bo plik może być nieaktualny po zabitym procesie.
 - Stan `thinking` przy bardzo starej aktywności (np. proces zabity w trakcie tury) obsługuje przyciemnianie i ukrywanie, a nie osobny stan.
 
@@ -285,7 +286,7 @@ Rdzeń modelu stanów to czysta funkcja: `reduce(state: SessionFacts, record: Tr
 
 ## Testy
 
-Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295 (01–09) i 2.1.306 (10–13; 13 odtworzony ręcznie). Oczekiwane wyniki:
+Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `fixtures/`. Fixture'y to zanonimizowane i skrócone transkrypty w formacie z Claude Code 2.1.295 (01–09) i 2.1.306 (10–14; 13 i 14 odtworzone ręcznie). Oczekiwane wyniki:
 
 | Fixture | Oczekiwany stan | Dodatkowo |
 |---|---|---|
@@ -302,6 +303,7 @@ Testy jednostkowe `AgentTrayCore` (XCTest lub Swift Testing) na fixture'ach z `f
 | `11-desktop-stop-hook-continuation.jsonl` | `monitoring(1)` | `yourTurn` po pierwszym `end_turn`, pracuje dalej po rekordzie `isMeta` z hooka Stop; `lastPrompt` = "Scal zmiany do main" |
 | `12-monitor.jsonl` | `yourTurn` | `monitoring(1)` po uruchomieniu `Monitor` i po jego zdarzeniu (`<event>` bez `<status>`); `yourTurn` po terminie `timeoutMs` i po `<status>completed</status>` |
 | `13-idle-compaction.jsonl` | `yourTurn` | po końcu tury recap (`away_summary`) i kompakcja w bezczynności (`compact_boundary`, `isCompactSummary`, `attachment`); znacznik przejrzenia pozostaje na `turn_duration`, `lastPrompt` = "Przygotuj agendę spotkania" |
+| `14-desktop-subagents-respawn.jsonl` | `yourTurn` | sesja desktopowa bez `turn_duration`: `waitingForSubagents(1)` po `end_turn` z subagentem w tle, `thinking` po powiadomieniu, znów `waitingForSubagents(1)` po uruchomieniu kolejnego subagenta; `yourTurn` po ostatnim powiadomieniu i odpowiedzi |
 
 `sessions-3398.json` testuje dekodowanie rejestru sesji, a `subagent.meta.json` jest próbką formatu metadanych subagenta (nieużywaną przez aplikację).
 

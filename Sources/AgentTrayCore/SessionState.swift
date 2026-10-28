@@ -246,8 +246,13 @@ public func classify(facts: SessionFacts, settings: Thresholds, now: Date) -> Se
 
     let subagents = open.filter { subagentTools.contains($0.name) }.count
     if subagents > 0 { return .waitingForSubagents(subagents) }
-    if facts.turnEnded && facts.pendingBackgroundAgents > 0 {
-        return .waitingForSubagents(facts.pendingBackgroundAgents)
+    // `turn_duration` reports the pending count, but desktop sessions never write it, and in
+    // the CLI it lands after the `end_turn` that already ended the turn. Agents seen starting
+    // and not yet finished cover both cases.
+    let runningAgents = facts.backgroundTasks.values.filter { $0 == .agent }.count
+    let pendingAgents = max(facts.pendingBackgroundAgents, runningAgents)
+    if facts.turnEnded && pendingAgents > 0 {
+        return .waitingForSubagents(pendingAgents)
     }
 
     if let tool = open.first {
