@@ -35,8 +35,24 @@ struct ClaudeDirectoryScannerTests {
         #expect(snapshot.registryName == "workspace-56")
         #expect(snapshot.isTerminalSession)
         #expect(scanner.registryEntries.map(\.pid) == [3398])
-        // The newest of the last record, the file mtime and the registry's `updatedAt`.
-        #expect(snapshot.lastActivity >= fixtureTime(3))
+        // The newer of the last record that moved the conversation and the registry's `updatedAt`.
+        #expect(snapshot.lastActivity == fixtureTime(3))
+    }
+
+    @Test func idleBookkeepingDoesNotMakeAnOldSessionFresh() throws {
+        let (temp, scanner) = try setUp()
+        try FileManager.default.copyItem(at: Fixtures.url("13-idle-compaction.jsonl"),
+                                         to: temp.url.appendingPathComponent(".claude/projects/-workspace/\(sessionId).jsonl"))
+        let snapshot = try #require(scanner.refresh(thresholds: .default, now: Date()).first)
+        // Neither the recap, the idle compaction nor the file written just now count: the turn ended at 4.5 s.
+        #expect(snapshot.lastActivity == fixtureTime(4.5))
+
+        // Back at the terminal 11 h after the turn, Claude Code writes the recap; the session stays dimmed.
+        let dimmed = SessionListing(sessions: [snapshot], thresholds: .default, now: fixtureTime(11 * 3600))
+        #expect(dimmed.rows.map(\.group) == [.dimmed])
+        #expect(dimmed.waitingCount == 0)
+        let hidden = SessionListing(sessions: [snapshot], thresholds: .default, now: fixtureTime(41 * 3600))
+        #expect(hidden.rows.isEmpty)
     }
 
     @Test func titleFallsBackToFirstPromptBeforeRegistryName() throws {
@@ -211,10 +227,12 @@ struct SessionListingTests {
 
     @Test func recordsThatDoNotAdvanceTheSessionKeepItAcknowledged() {
         // Claude Code appends timestamped bookkeeping after a turn (e.g. the away recap,
-        // hook summaries, attachments). Their exact recap format is not verified yet,
-        // so these are generic stand-ins for "a timestamped record that is not a turn".
+        // hook summaries, attachments). Besides the recap, these are generic stand-ins
+        // for "a timestamped record that is not a turn".
         let turn = [Line.prompt("a"), Line.text("b"), Line.turnDuration(at: 3)]
         let noise = [
+            Line.json(["type": "system", "subtype": "away_summary", "timestamp": Line.ts(299), "isMeta": false,
+                       "content": "Czekam na Twoją decyzję. (disable recaps in /config)"]),
             Line.json(["type": "system", "subtype": "some-future-subtype", "timestamp": Line.ts(300), "content": "※ recap: …"]),
             Line.json(["type": "system", "subtype": "stop_hook_summary", "timestamp": Line.ts(301)]),
             Line.json(["type": "attachment", "timestamp": Line.ts(302)]),

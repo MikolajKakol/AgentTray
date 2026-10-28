@@ -118,8 +118,9 @@ struct FixtureTests {
         #expect(ended.lastMessage == "Testy e2e przeszły.")
     }
 
-    // Fixture 13: after the turn Claude Code writes the away recap ("※ recap") and later
-    // compacts the idle session ("Compacted while idle"). None of it moves the conversation.
+    // Fixture 13: after the turn Claude Code writes the away recap ("※ recap", format taken
+    // from real sessions) and later compacts the idle session ("Compacted while idle").
+    // None of it moves the conversation.
     @Test func idleRecapAndCompactionKeepTheTurnEnded() throws {
         let facts = try Fixtures.facts("13-idle-compaction.jsonl")
         #expect(classify(facts: facts, settings: .default, now: fixtureTime(3600)) == .yourTurn)

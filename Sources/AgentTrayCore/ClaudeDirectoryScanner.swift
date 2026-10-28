@@ -108,7 +108,11 @@ public final class ClaudeDirectoryScanner {
             guard let reader = transcript.reader else { return nil }
             let facts = reader.facts
             let entry = registry[transcript.sessionId]
-            let activity = [facts.lastRecordTimestamp, reader.modificationDate, entry?.updatedAt]
+            // Bookkeeping appended to an idle session (the away recap, idle compaction) changes
+            // the file but must not make an old session fresh again, so the file mtime and the
+            // last record count only when nothing in the transcript moved the conversation.
+            let transcriptActivity = facts.lastSignificantTimestamp ?? facts.lastRecordTimestamp ?? reader.modificationDate
+            let activity = [transcriptActivity, entry?.updatedAt]
                 .compactMap { $0 }.max() ?? .distantPast
             let title = facts.transcriptTitle
                 ?? facts.firstHumanPrompt.flatMap(Self.shortTitle)
