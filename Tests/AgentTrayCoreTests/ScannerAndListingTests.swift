@@ -277,7 +277,7 @@ struct SessionListingTests {
         let lower = acknowledged.mapValues { $0.addingTimeInterval(-0.000_000_1) }
         for stored in [legacy, lower] {
             let listing = SessionListing(sessions: sessions, thresholds: .default, now: now, acknowledged: stored)
-            #expect(listing.rows.allSatisfy(\.isAcknowledged))
+            #expect(listing.rows.allSatisfy { $0.isAcknowledged })
         }
     }
 
